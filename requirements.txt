@@ -1,8 +1,50 @@
-# Web framework
+# Core Web Framework
 Flask==3.0.3
+Werkzeug==3.0.3
 
-# Enable Cross-Origin Resource Sharing (CORS) for frontend ↔ backend calls
+# CORS Support
 flask-cors==4.0.0
 
-# HTTP client for calling TikTok API
+# HTTP Client for TikTok API
 requests==2.32.3
+urllib3==2.2.2
+certifi==2024.7.4
+charset-normalizer==3.3.2
+idna==3.7
+
+# Production Server
+gunicorn==21.2.0
+
+# Environment Variables
+python-dotenv==1.0.1
+
+# JSON Processing
+simplejson==3.19.2
+
+# Date/Time Handling
+python-dateutil==2.9.0
+
+# Additional Flask Extensions (optional but recommended)
+Flask-Limiter==3.5.0  # Rate limiting
+Flask-Caching==2.1.0  # Caching support
+
+# Monitoring and Logging (optional)
+flask-log-request-id==0.10.1
+
+# Security Headers (optional but recommended)
+flask-talisman==1.1.0
+
+# Click for CLI
+click==8.1.7
+
+# Markup Safe
+MarkupSafe==2.1.5
+
+# Jinja2 templating
+Jinja2==3.1.4
+
+# itsdangerous for session management
+itsdangerous==2.2.0
+
+# Packaging
+packaging==24.1
