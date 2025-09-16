@@ -369,6 +369,157 @@ def update_avatar_video_name():
     except requests.RequestException as e:
         return jsonify({"error": str(e)}), 500
 
+@app.get("/api/get_assets_videos")
+def get_assets_videos():
+    """
+    Get videos from TikTok Ads assets library.
+    Query params:
+      access_token=...
+      advertiser_id=...
+      page=1 (optional)
+      page_size=20 (optional)
+    """
+    access_token = (request.args.get("access_token") or "").strip()
+    advertiser_id = (request.args.get("advertiser_id") or "").strip()
+
+    if not access_token:
+        return jsonify({"error": "access_token is required"}), 400
+    if not advertiser_id:
+        return jsonify({"error": "advertiser_id is required"}), 400
+
+    page = int(request.args.get("page", 1))
+    page_size = int(request.args.get("page_size", 20))
+
+    try:
+        r = requests.get(
+            f"{TIKTOK_BASE}/file/video/ad/search/",
+            headers={"Access-Token": access_token},
+            params={
+                "advertiser_id": advertiser_id,
+                "page": page,
+                "page_size": page_size
+            },
+            timeout=30,
+        )
+        return jsonify(r.json()), r.status_code
+    except requests.RequestException as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.post("/api/upload_video_to_ads")
+def upload_video_to_ads():
+    """
+    Upload a video to TikTok Ads account (from URL or file_id).
+    Body JSON:
+    {
+      "access_token": "...",
+      "advertiser_id": "...",
+      "video_url": "..." OR "video_id": "...",
+      "video_name": "..."
+    }
+    """
+    data = request.get_json(force=True) or {}
+    access_token = data.get("access_token", "").strip()
+    advertiser_id = data.get("advertiser_id", "").strip()
+    video_url = data.get("video_url", "").strip()
+    video_id = data.get("video_id", "").strip()
+    video_name = data.get("video_name", "").strip()
+
+    if not access_token:
+        return jsonify({"error": "Missing access_token"}), 400
+    if not advertiser_id:
+        return jsonify({"error": "Missing advertiser_id"}), 400
+    if not video_url and not video_id:
+        return jsonify({"error": "Either video_url or video_id is required"}), 400
+
+    payload = {
+        "advertiser_id": advertiser_id,
+    }
+
+    if video_url:
+        payload["video_url"] = video_url
+    if video_id:
+        payload["video_id"] = video_id
+    if video_name:
+        payload["file_name"] = video_name
+
+    try:
+        # Upload video to TikTok Ads
+        r = requests.post(
+            f"{TIKTOK_BASE}/file/video/ad/upload/",
+            headers=tt_headers(access_token),
+            json=payload,
+            timeout=60,
+        )
+        return jsonify(r.json()), r.status_code
+    except requests.RequestException as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.post("/api/upload_video_file")
+def upload_video_file():
+    """
+    Upload a video file from local computer to TikTok.
+    Multipart form data with:
+    - access_token
+    - advertiser_id
+    - video_file (the actual file)
+    - upload_type: "FILE" or "URL"
+    """
+    import requests
+
+    access_token = request.form.get("access_token", "").strip()
+    advertiser_id = request.form.get("advertiser_id", "").strip()
+    upload_type = request.form.get("upload_type", "FILE").strip()
+
+    if not access_token:
+        return jsonify({"error": "Missing access_token"}), 400
+    if not advertiser_id:
+        return jsonify({"error": "Missing advertiser_id"}), 400
+
+    if upload_type == "FILE" and 'video_file' not in request.files:
+        return jsonify({"error": "No video file provided"}), 400
+
+    try:
+        if upload_type == "FILE":
+            video_file = request.files['video_file']
+
+            # Prepare multipart form data
+            files = {
+                'video_file': (video_file.filename, video_file.stream, video_file.content_type)
+            }
+
+            data = {
+                'advertiser_id': advertiser_id,
+                'upload_type': 'FILE'
+            }
+
+            r = requests.post(
+                f"{TIKTOK_BASE}/file/video/ad/upload/",
+                headers={"Access-Token": access_token},
+                files=files,
+                data=data,
+                timeout=300,  # 5 minutes for large files
+            )
+        else:
+            # URL upload
+            video_url = request.form.get("video_url", "").strip()
+            if not video_url:
+                return jsonify({"error": "video_url is required for URL upload"}), 400
+
+            r = requests.post(
+                f"{TIKTOK_BASE}/file/video/ad/upload/",
+                headers=tt_headers(access_token),
+                json={
+                    "advertiser_id": advertiser_id,
+                    "upload_type": "URL",
+                    "video_url": video_url
+                },
+                timeout=60,
+            )
+
+        return jsonify(r.json()), r.status_code
+    except requests.RequestException as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
     app.run(host="0.0.0.0", port=port, debug=True)
