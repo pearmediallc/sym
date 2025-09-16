@@ -206,6 +206,98 @@
     .badge.success { background: #10b981; color: white; }
     .badge.mono { background: var(--gray); color: var(--dark); }
 
+    .video-selector {
+      background: var(--gray);
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 16px;
+    }
+
+    .video-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .video-item {
+      position: relative;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .video-item:hover {
+      border-color: var(--primary);
+    }
+
+    .video-item.selected {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(255, 0, 79, 0.2);
+    }
+
+    .video-item input[type="checkbox"] {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      z-index: 10;
+      width: 20px;
+      height: 20px;
+    }
+
+    .video-thumbnail {
+      width: 100%;
+      height: 100px;
+      object-fit: cover;
+    }
+
+    .video-name {
+      padding: 8px;
+      font-size: 11px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .upload-section {
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+      margin-top: 16px;
+      transition: all 0.3s ease;
+    }
+
+    .upload-section:hover {
+      border-color: var(--primary);
+      background: rgba(255, 0, 79, 0.02);
+    }
+
+    .tab-buttons {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .tab-button {
+      padding: 8px 16px;
+      background: white;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .tab-button.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
     .muted { color: var(--text-gray); font-size: 0.9rem; }
     .mono { font-family: 'SF Mono', Monaco, 'Inconsolata', 'Fira Code', monospace; }
@@ -326,11 +418,55 @@
           </select>
         </div>
       </div>
+      <!-- Advertiser ID for fetching videos -->
       <div class="row" style="margin-top:12px;">
         <div class="col">
-          <label>Video IDs (comma-separated)</label>
-          <input id="pVideos" placeholder="v10033g5..., v10033g5..." />
+          <label>Advertiser ID</label>
+          <input id="advertiserId" placeholder="Your TikTok Ads Advertiser ID" />
         </div>
+      </div>
+
+      <!-- Video Selection Section -->
+      <div class="video-selector">
+        <h4 style="margin: 0 0 12px 0;">📹 Select Videos</h4>
+
+        <div class="tab-buttons">
+          <button class="tab-button active" onclick="switchVideoTab('assets')">TikTok Assets</button>
+          <button class="tab-button" onclick="switchVideoTab('upload')">Upload Video</button>
+          <button class="tab-button" onclick="switchVideoTab('manual')">Manual IDs</button>
+        </div>
+
+        <!-- Assets Tab -->
+        <div id="assetsTab" style="display: block;">
+          <button id="loadAssetsBtn" class="btn-secondary" style="width: auto; margin-bottom: 12px;">Load Videos from Assets</button>
+          <div id="assetsStatus" class="muted"></div>
+          <div id="videoGrid" class="video-grid"></div>
+          <p class="muted" style="margin-top: 8px;">Selected: <span id="selectedCount">0</span> video(s)</p>
+        </div>
+
+        <!-- Upload Tab -->
+        <div id="uploadTab" style="display: none;">
+          <div class="upload-section">
+            <input type="file" id="videoFile" accept="video/*" style="display: none;" />
+            <button class="btn-primary" onclick="document.getElementById('videoFile').click()">Choose Video File</button>
+            <p id="fileName" class="muted" style="margin-top: 12px;">No file selected</p>
+            <button id="uploadVideoBtn" class="btn-success" style="display: none; margin-top: 12px;">Upload to TikTok Ads</button>
+            <p id="uploadStatus" class="muted" style="margin-top: 8px;"></p>
+          </div>
+        </div>
+
+        <!-- Manual IDs Tab -->
+        <div id="manualTab" style="display: none;">
+          <div class="row">
+            <div class="col">
+              <label>Video IDs (comma-separated)</label>
+              <input id="pVideos" placeholder="v10033g5..., v10033g5..." />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:12px;">
         <div class="col">
           <label>Image URLs (comma-separated)</label>
           <input id="pImages" placeholder="https://..., https://..." />
@@ -506,7 +642,18 @@
         const description = qs("#pDesc").value.trim();
         const sps = (qs("#pSps").value || "").split(",").map(s => s.trim()).filter(Boolean).slice(0, 10);
         const video_duration = qs("#pDur").value;
-        const vids = (qs("#pVideos").value || "").split(",").map(s => s.trim()).filter(Boolean);
+        // Get videos based on active tab
+        let vids = [];
+        const activeTab = document.querySelector('#assetsTab').style.display === 'block' ? 'assets' :
+                         document.querySelector('#uploadTab').style.display === 'block' ? 'upload' : 'manual';
+
+        if (activeTab === 'assets' || activeTab === 'upload') {
+          vids = selectedVideos; // Use selected videos from grid or uploaded
+        } else {
+          // Manual IDs
+          vids = (qs("#pVideos").value || "").split(",").map(s => s.trim()).filter(Boolean);
+        }
+
         const imgs = (qs("#pImages").value || "").split(",").map(s => s.trim()).filter(Boolean);
 
         if (!name || !brand || !description) {
@@ -618,6 +765,137 @@
         results.innerHTML = `<div class="card"><p class="muted">Failed to load scripts. Please check your access token.</p></div>`;
       }
     }
+
+    // Video selection functionality
+    let selectedVideos = [];
+
+    function switchVideoTab(tab) {
+      // Hide all tabs
+      qs('#assetsTab').style.display = 'none';
+      qs('#uploadTab').style.display = 'none';
+      qs('#manualTab').style.display = 'none';
+
+      // Remove active class from all buttons
+      document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active');
+      });
+
+      // Show selected tab and activate button
+      if (tab === 'assets') {
+        qs('#assetsTab').style.display = 'block';
+        document.querySelectorAll('.tab-button')[0].classList.add('active');
+      } else if (tab === 'upload') {
+        qs('#uploadTab').style.display = 'block';
+        document.querySelectorAll('.tab-button')[1].classList.add('active');
+      } else if (tab === 'manual') {
+        qs('#manualTab').style.display = 'block';
+        document.querySelectorAll('.tab-button')[2].classList.add('active');
+      }
+    }
+
+    // Load videos from TikTok assets
+    qs('#loadAssetsBtn')?.addEventListener('click', async () => {
+      const access_token = qs('#accessToken').value.trim();
+      const advertiser_id = qs('#advertiserId').value.trim();
+
+      if (!access_token) { alert('Please enter Access Token'); return; }
+      if (!advertiser_id) { alert('Please enter Advertiser ID'); return; }
+
+      qs('#assetsStatus').textContent = 'Loading videos from assets...';
+
+      try {
+        const response = await fetch(`/api/get_assets_videos?access_token=${encodeURIComponent(access_token)}&advertiser_id=${encodeURIComponent(advertiser_id)}&page_size=50`);
+        const data = await response.json();
+
+        if (data?.data?.list) {
+          displayVideoGrid(data.data.list);
+          qs('#assetsStatus').textContent = `Found ${data.data.list.length} videos in your assets`;
+        } else {
+          qs('#assetsStatus').textContent = 'Failed to load videos';
+        }
+      } catch (error) {
+        qs('#assetsStatus').textContent = `Error: ${error.message}`;
+      }
+    });
+
+    function displayVideoGrid(videos) {
+      const grid = qs('#videoGrid');
+      grid.innerHTML = '';
+
+      videos.forEach(video => {
+        const item = document.createElement('div');
+        item.className = 'video-item';
+        item.innerHTML = `
+          <input type="checkbox" value="${video.video_id}" onchange="toggleVideoSelection(this, '${video.video_id}')" />
+          <img src="${video.cover_url || ''}" alt="${video.file_name}" class="video-thumbnail" />
+          <div class="video-name">${video.file_name || video.video_id}</div>
+        `;
+        grid.appendChild(item);
+      });
+    }
+
+    window.toggleVideoSelection = function(checkbox, videoId) {
+      const item = checkbox.closest('.video-item');
+
+      if (checkbox.checked) {
+        selectedVideos.push(videoId);
+        item.classList.add('selected');
+      } else {
+        selectedVideos = selectedVideos.filter(id => id !== videoId);
+        item.classList.remove('selected');
+      }
+
+      qs('#selectedCount').textContent = selectedVideos.length;
+    };
+
+    // File upload handling
+    qs('#videoFile')?.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        qs('#fileName').textContent = `Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+        qs('#uploadVideoBtn').style.display = 'inline-block';
+      }
+    });
+
+    qs('#uploadVideoBtn')?.addEventListener('click', async () => {
+      const access_token = qs('#accessToken').value.trim();
+      const advertiser_id = qs('#advertiserId').value.trim();
+      const file = qs('#videoFile').files[0];
+
+      if (!access_token) { alert('Please enter Access Token'); return; }
+      if (!advertiser_id) { alert('Please enter Advertiser ID'); return; }
+      if (!file) { alert('Please select a video file'); return; }
+
+      const formData = new FormData();
+      formData.append('access_token', access_token);
+      formData.append('advertiser_id', advertiser_id);
+      formData.append('video_file', file);
+      formData.append('upload_type', 'FILE');
+
+      qs('#uploadStatus').textContent = 'Uploading video...';
+
+      try {
+        const response = await fetch('/api/upload_video_file', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await response.json();
+
+        if (data?.data?.video_id) {
+          qs('#uploadStatus').textContent = `✅ Upload successful! Video ID: ${data.data.video_id}`;
+          // Add to selected videos
+          selectedVideos.push(data.data.video_id);
+          qs('#selectedCount').textContent = selectedVideos.length;
+        } else {
+          qs('#uploadStatus').textContent = `Failed: ${data?.message || 'Unknown error'}`;
+        }
+      } catch (error) {
+        qs('#uploadStatus').textContent = `Error: ${error.message}`;
+      }
+    });
+
+    // Make switchVideoTab global
+    window.switchVideoTab = switchVideoTab;
 
     qs("#generateBtn").addEventListener("click", createTask);
     qs("#listBtn").addEventListener("click", listScripts);
