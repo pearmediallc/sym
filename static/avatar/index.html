@@ -897,6 +897,8 @@ Example: 'Hello! Welcome to our amazing product. With our innovative solution, y
                 <p class="muted">Preview URL expires in 6 hours</p>
               </div>
               <button onclick="copyToClipboard('${previewUrl}')" class="btn-secondary" style="width: auto; margin-top: 12px;">📋 Copy Video URL</button>
+              <button onclick="showUploadDialog('${previewUrl}', '${taskId}')" class="btn-success" style="width: auto; margin-top: 12px; margin-left: 8px;">📤 Upload to TikTok Ads</button>
+              <div id="uploadStatus_${taskId}" style="margin-top: 12px;"></div>
             ` : '<p class="muted">Video preview will be available shortly...</p>'}
           </div>
         `;
@@ -979,6 +981,85 @@ Example: 'Hello! Welcome to our amazing product. With our innovative solution, y
       }).catch(() => {
         prompt("Copy this URL:", text);
       });
+    }
+
+    // Show upload dialog
+    function showUploadDialog(videoUrl, taskId) {
+      const dialog = document.createElement('div');
+      dialog.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 9999;';
+      dialog.innerHTML = `
+        <div style="background: white; padding: 32px; border-radius: 16px; max-width: 500px; width: 90%;">
+          <h3 style="margin-top: 0;">📤 Upload to TikTok Ads</h3>
+          <p class="muted">Upload this avatar video to your TikTok Ads account</p>
+
+          <div style="margin-top: 20px;">
+            <label style="display: block; margin-bottom: 8px; font-weight: 600;">Advertiser ID</label>
+            <input type="text" id="uploadAdvertiserId" placeholder="Your TikTok Ads Advertiser ID" style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px;">
+          </div>
+
+          <div style="margin-top: 16px;">
+            <label style="display: block; margin-bottom: 8px; font-weight: 600;">Video Name (optional)</label>
+            <input type="text" id="uploadVideoName" placeholder="e.g., Avatar Video ${taskId}" value="Avatar Video ${taskId}" style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px;">
+          </div>
+
+          <div id="uploadDialogStatus" style="margin-top: 16px;"></div>
+
+          <div style="margin-top: 20px; display: flex; gap: 12px;">
+            <button onclick="performUploadToAds('${videoUrl}', '${taskId}')" class="btn-primary" style="flex: 1;">Upload Now</button>
+            <button onclick="this.closest('[style*=\"position: fixed\"]').remove()" class="btn-secondary" style="flex: 1;">Cancel</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(dialog);
+    }
+
+    // Perform upload to TikTok Ads
+    async function performUploadToAds(videoUrl, taskId) {
+      const access_token = qs("#accessToken").value.trim();
+      const advertiser_id = document.getElementById('uploadAdvertiserId').value.trim();
+      const video_name = document.getElementById('uploadVideoName').value.trim();
+      const statusDiv = document.getElementById('uploadDialogStatus');
+
+      if (!advertiser_id) {
+        statusDiv.innerHTML = '<p style="color: #dc2626;">Please enter your Advertiser ID</p>';
+        return;
+      }
+
+      statusDiv.innerHTML = '<p style="color: #eab308;">Uploading video to TikTok Ads...</p>';
+
+      try {
+        const response = await fetch('/api/upload_video_to_ads', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            access_token,
+            advertiser_id,
+            video_url: videoUrl,
+            video_name: video_name || `Avatar Video ${taskId}`
+          })
+        });
+
+        const data = await response.json();
+
+        if (data?.data?.video_id || data?.code === "0") {
+          statusDiv.innerHTML = '<p style="color: #16a34a;">✅ Successfully uploaded to TikTok Ads!</p>';
+
+          // Also update the main status
+          const mainStatus = document.getElementById(`uploadStatus_${taskId}`);
+          if (mainStatus) {
+            mainStatus.innerHTML = `<p style="color: #16a34a;">✅ Uploaded to TikTok Ads (Video ID: ${data.data?.video_id || 'Success'})</p>`;
+          }
+
+          // Close dialog after 2 seconds
+          setTimeout(() => {
+            document.querySelector('[style*="position: fixed"]')?.remove();
+          }, 2000);
+        } else {
+          statusDiv.innerHTML = `<p style="color: #dc2626;">❌ Upload failed: ${data?.message || 'Unknown error'}</p>`;
+        }
+      } catch (error) {
+        statusDiv.innerHTML = `<p style="color: #dc2626;">❌ Error: ${error.message}</p>`;
+      }
     }
 
     function playVideo(url) {
