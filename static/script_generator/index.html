@@ -452,7 +452,10 @@
 
         <!-- Library Tab - Shows user's TikTok videos -->
         <div id="libraryTab" style="display: block;">
-          <div id="videoLoadStatus" class="muted" style="margin-bottom: 12px;">Loading your videos...</div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div id="videoLoadStatus" class="muted">Loading your videos...</div>
+            <button id="refreshVideosBtn" class="btn-secondary" onclick="loadUserVideos()" style="padding: 6px 12px; font-size: 12px;">🔄 Refresh</button>
+          </div>
           <div id="videoGrid" class="video-grid"></div>
           <p class="muted" style="margin-top: 8px;">Selected: <span id="selectedCount">0</span> video(s)</p>
         </div>
@@ -848,37 +851,64 @@
 
       qs('#videoLoadStatus').textContent = 'Loading your TikTok videos...';
 
+      qs('#refreshVideosBtn').disabled = true;
+      qs('#refreshVideosBtn').textContent = '🔄 Loading...';
+
       try {
-        const response = await fetch(`/api/get_assets_videos?access_token=${encodeURIComponent(access_token)}&advertiser_id=${encodeURIComponent(advertiser_id)}&page_size=100`);
+        // Use larger page size to get more videos
+        const response = await fetch(`/api/get_assets_videos?access_token=${encodeURIComponent(access_token)}&advertiser_id=${encodeURIComponent(advertiser_id)}&page_size=200&page=1`);
         const data = await response.json();
+
+        console.log('Full TikTok video search response:', data);
+
+        // Debug: Show the full response structure
+        console.log('Response structure:', {
+          code: data?.code,
+          message: data?.message,
+          data_keys: data?.data ? Object.keys(data.data) : 'no data',
+          list_length: data?.data?.list?.length || 0,
+          page_info: data?.data?.page_info
+        });
 
         if (data?.data?.list && data.data.list.length > 0) {
           displayVideoGrid(data.data.list);
-          qs('#videoLoadStatus').textContent = `Showing ${data.data.list.length} videos from your TikTok account`;
+          const pageInfo = data.data.page_info;
+          const totalCount = pageInfo?.total_number || data.data.list.length;
+          qs('#videoLoadStatus').textContent = `Showing ${data.data.list.length} of ${totalCount} total videos from your TikTok account`;
         } else if (data?.data?.list && data.data.list.length === 0) {
-          qs('#videoLoadStatus').textContent = 'No videos found in your TikTok account. Upload some videos first.';
+          const pageInfo = data.data.page_info;
+          if (pageInfo?.total_number > 0) {
+            qs('#videoLoadStatus').textContent = `Found ${pageInfo.total_number} videos but none on this page. Try refreshing.`;
+          } else {
+            qs('#videoLoadStatus').textContent = 'No videos found in your TikTok account. Upload some videos first.';
+          }
           qs('#videoGrid').innerHTML = '';
         } else if (data?.code === '0' || data?.code === 0) {
           // TikTok returns code 0 for success, check if videos exist
           if (data?.data && Object.keys(data.data).length > 0) {
             // If data exists but not in list format, try to parse it
-            const videos = data.data.videos || data.data.video_list || [];
+            const videos = data.data.videos || data.data.video_list || data.data.materials || [];
             if (videos.length > 0) {
               displayVideoGrid(videos);
               qs('#videoLoadStatus').textContent = `Showing ${videos.length} videos from your TikTok account`;
             } else {
-              qs('#videoLoadStatus').textContent = 'No videos found. Upload a video to get started.';
+              qs('#videoLoadStatus').textContent = 'API returned success but no videos found. The videos might still be processing.';
               qs('#videoGrid').innerHTML = '';
             }
           } else {
-            qs('#videoLoadStatus').textContent = 'No videos found in your account yet.';
+            qs('#videoLoadStatus').textContent = 'No video data returned. Videos might still be processing or try refreshing.';
             qs('#videoGrid').innerHTML = '';
           }
         } else {
-          qs('#videoLoadStatus').textContent = `Error: ${data?.message || 'Failed to load videos'}`;
+          qs('#videoLoadStatus').textContent = `Error: ${data?.message || data?.error || 'Failed to load videos'}`;
+          console.error('API Error:', data);
         }
       } catch (error) {
         qs('#videoLoadStatus').textContent = `Error: ${error.message}`;
+        console.error('Error loading videos:', error);
+      } finally {
+        qs('#refreshVideosBtn').disabled = false;
+        qs('#refreshVideosBtn').textContent = '🔄 Refresh';
       }
     }
 
