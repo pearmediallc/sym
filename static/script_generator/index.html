@@ -378,7 +378,7 @@
       <div class="section-title">Configuration</div>
     <div class="row">
       <div class="col">
-        <label>Access-Token</label>
+        <label>Access-Token <span id="tokenStatus" style="color: green; font-weight: normal;"></span></label>
         <input id="accessToken" type="password" placeholder="Paste Access-Token here" />
       </div>
       <div class="col">
@@ -524,7 +524,17 @@
 
       // Auto-load videos when switching to PRODUCT mode
       if (mode === "PRODUCT") {
-        loadUserVideos();
+        // Check if we have both access token and advertiser ID
+        const access_token = qs('#accessToken').value.trim();
+        const advertiser_id = qs('#advertiserId').value.trim();
+
+        if (access_token && advertiser_id) {
+          loadUserVideos();
+        } else if (access_token && !advertiser_id) {
+          qs('#videoLoadStatus').textContent = 'Please enter your Advertiser ID to see your videos';
+        } else if (!access_token) {
+          qs('#videoLoadStatus').textContent = 'Please enter Access Token and Advertiser ID above to see your videos';
+        }
       }
     });
 
@@ -791,8 +801,21 @@
       const access_token = qs('#accessToken').value.trim();
       const advertiser_id = qs('#advertiserId').value.trim();
 
-      if (!access_token || !advertiser_id) {
+      if (!access_token && !advertiser_id) {
         qs('#videoLoadStatus').textContent = 'Enter Access Token and Advertiser ID above to see your videos';
+        qs('#videoGrid').innerHTML = '';
+        return;
+      }
+
+      if (!access_token) {
+        qs('#videoLoadStatus').textContent = 'Please enter your Access Token above';
+        qs('#videoGrid').innerHTML = '';
+        return;
+      }
+
+      if (!advertiser_id) {
+        qs('#videoLoadStatus').textContent = 'Please enter your Advertiser ID to load videos';
+        qs('#videoGrid').innerHTML = '';
         return;
       }
 
@@ -816,9 +839,32 @@
       }
     }
 
+    // Listen for access token changes
+    qs('#accessToken')?.addEventListener('input', () => {
+      const token = qs('#accessToken').value.trim();
+      const tokenStatus = qs('#tokenStatus');
+      if (token) {
+        tokenStatus.textContent = '✓ Token entered';
+        tokenStatus.style.color = 'green';
+      } else {
+        tokenStatus.textContent = '';
+      }
+
+      if (qs('#mode').value === 'PRODUCT' && qs('#advertiserId').value.trim()) {
+        loadUserVideos();
+      }
+    });
+
     // Listen for advertiser ID changes to reload videos
+    qs('#advertiserId')?.addEventListener('input', () => {
+      if (qs('#mode').value === 'PRODUCT' && qs('#accessToken').value.trim()) {
+        loadUserVideos();
+      }
+    });
+
+    // Also trigger on blur for better UX
     qs('#advertiserId')?.addEventListener('blur', () => {
-      if (qs('#mode').value === 'PRODUCT') {
+      if (qs('#mode').value === 'PRODUCT' && qs('#accessToken').value.trim()) {
         loadUserVideos();
       }
     });
@@ -874,8 +920,16 @@
       const advertiser_id = qs('#advertiserId').value.trim();
       const file = qs('#videoFile').files[0];
 
-      if (!access_token) { alert('Please enter Access Token'); return; }
-      if (!advertiser_id) { alert('Please enter Advertiser ID'); return; }
+      if (!access_token) {
+        alert('Please enter Access Token at the top of the form');
+        qs('#accessToken').focus();
+        return;
+      }
+      if (!advertiser_id) {
+        alert('Please enter Advertiser ID in the form above');
+        qs('#advertiserId').focus();
+        return;
+      }
       if (!file) { alert('Please select a video file'); return; }
 
       const formData = new FormData();
@@ -884,25 +938,58 @@
       formData.append('video_file', file);
       formData.append('upload_type', 'FILE');
 
-      qs('#uploadStatus').textContent = 'Uploading video...';
+      qs('#uploadStatus').textContent = 'Uploading video... Please wait, this may take a few moments.';
+      qs('#uploadStatus').style.color = '#1a73e8';
+      qs('#uploadVideoBtn').disabled = true;
+      qs('#uploadVideoBtn').textContent = 'Uploading...';
 
       try {
+        console.log('Uploading video with:', {
+          access_token: access_token.substring(0, 10) + '...',
+          advertiser_id,
+          file_name: file.name,
+          file_size: (file.size / 1024 / 1024).toFixed(2) + ' MB'
+        });
+
         const response = await fetch('/api/upload_video_file', {
           method: 'POST',
           body: formData
         });
         const data = await response.json();
+        console.log('Upload response:', data);
 
         if (data?.data?.video_id) {
           qs('#uploadStatus').textContent = `✅ Upload successful! Video ID: ${data.data.video_id}`;
           // Add to selected videos
           selectedVideos.push(data.data.video_id);
           qs('#selectedCount').textContent = selectedVideos.length;
+          // Clear the file input
+          qs('#videoFile').value = '';
+          qs('#fileName').textContent = 'No file selected';
+          qs('#uploadVideoBtn').style.display = 'none';
+          // Reload the video grid to show the new video
+          setTimeout(() => {
+            loadUserVideos();
+            switchVideoTab('library');
+          }, 2000);
         } else {
-          qs('#uploadStatus').textContent = `Failed: ${data?.message || 'Unknown error'}`;
+          qs('#uploadStatus').textContent = `Failed: ${data?.message || data?.error || 'Unknown error'}`;
+          qs('#uploadStatus').style.color = '#dc2626';
+          console.error('Upload failed:', data);
+
+          // Show more detailed error info
+          if (data?.details) {
+            qs('#uploadStatus').innerHTML += `<br><small>${data.details}</small>`;
+          }
         }
       } catch (error) {
         qs('#uploadStatus').textContent = `Error: ${error.message}`;
+        qs('#uploadStatus').style.color = '#dc2626';
+        console.error('Upload error:', error);
+      } finally {
+        // Re-enable the upload button
+        qs('#uploadVideoBtn').disabled = false;
+        qs('#uploadVideoBtn').textContent = 'Upload to TikTok Ads';
       }
     });
 
@@ -911,6 +998,15 @@
 
     qs("#generateBtn").addEventListener("click", createTask);
     qs("#listBtn").addEventListener("click", listScripts);
+
+    // Check for existing token on page load
+    setTimeout(() => {
+      const token = qs('#accessToken').value.trim();
+      if (token) {
+        qs('#tokenStatus').textContent = '✓ Token entered';
+        qs('#tokenStatus').style.color = 'green';
+      }
+    }, 100);
   </script>
 </body>
 </html>
