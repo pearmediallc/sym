@@ -459,12 +459,28 @@
 
         <!-- Upload Tab -->
         <div id="uploadTab" style="display: none;">
-          <div class="upload-section">
+          <div class="tab-buttons" style="margin-bottom: 16px;">
+            <button class="tab-button active" onclick="switchUploadMethod('file')">Upload File</button>
+            <button class="tab-button" onclick="switchUploadMethod('url')">Upload from URL</button>
+          </div>
+
+          <!-- File Upload -->
+          <div id="fileUploadSection" class="upload-section">
             <input type="file" id="videoFile" accept="video/*" style="display: none;" />
             <button class="btn-primary" onclick="document.getElementById('videoFile').click()">Choose Video File</button>
             <p id="fileName" class="muted" style="margin-top: 12px;">No file selected</p>
             <button id="uploadVideoBtn" class="btn-success" style="display: none; margin-top: 12px;">Upload to TikTok Ads</button>
             <p id="uploadStatus" class="muted" style="margin-top: 8px;"></p>
+          </div>
+
+          <!-- URL Upload -->
+          <div id="urlUploadSection" class="upload-section" style="display: none;">
+            <label>Video URL</label>
+            <input type="url" id="videoUrl" placeholder="https://example.com/video.mp4" style="margin-top: 8px;" />
+            <label style="margin-top: 12px;">File Name</label>
+            <input type="text" id="urlFileName" placeholder="video.mp4" style="margin-top: 8px;" />
+            <button id="uploadUrlBtn" class="btn-success" style="margin-top: 12px;">Upload from URL</button>
+            <p id="urlUploadStatus" class="muted" style="margin-top: 8px;"></p>
           </div>
         </div>
       </div>
@@ -959,36 +975,30 @@
       qs('#uploadVideoBtn').textContent = 'Preparing upload...';
 
       try {
-        // First, get the upload signature
-        const signatureResponse = await fetch(`/api/get_video_upload_signature?access_token=${encodeURIComponent(access_token)}&advertiser_id=${encodeURIComponent(advertiser_id)}`);
-        const signatureData = await signatureResponse.json();
+        // For file uploads, we'll show a message that URL upload is recommended
+        qs('#uploadStatus').textContent = 'Note: For better reliability, consider using "Upload from URL" tab. Attempting file upload...';
+        qs('#uploadStatus').style.color = '#eab308';
 
-        console.log('Signature response:', signatureData);
-
-        if (!signatureData?.data?.video_signature) {
-          throw new Error('Failed to get upload signature: ' + (signatureData?.message || 'Unknown error'));
-        }
-
-        const video_signature = signatureData.data.video_signature;
-
-        // Now upload with the signature
+        // Try direct file upload without signature first
         const formData = new FormData();
         formData.append('access_token', access_token);
         formData.append('advertiser_id', advertiser_id);
         formData.append('video_file', file);
-        formData.append('video_signature', video_signature);
         formData.append('upload_type', 'UPLOAD_BY_FILE');
         formData.append('file_name', file.name);
+        formData.append('flaw_detect', 'true');
+        formData.append('auto_fix_enabled', 'true');
+        formData.append('auto_bind_enabled', 'true');
 
-        qs('#uploadStatus').textContent = 'Uploading video... Please wait, this may take a few moments.';
+        qs('#uploadStatus').textContent = 'Uploading video file... Please wait, this may take a few moments.';
+        qs('#uploadStatus').style.color = '#1a73e8';
         qs('#uploadVideoBtn').textContent = 'Uploading...';
 
-        console.log('Uploading video with signature:', {
+        console.log('Uploading video file:', {
           access_token: access_token.substring(0, 10) + '...',
           advertiser_id,
           file_name: file.name,
-          file_size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
-          has_signature: !!video_signature
+          file_size: (file.size / 1024 / 1024).toFixed(2) + ' MB'
         });
 
         const response = await fetch('/api/upload_video_file', {
@@ -1043,8 +1053,125 @@
       }
     });
 
-    // Make switchVideoTab global
+    // Upload method switching
+    function switchUploadMethod(method) {
+      // Remove active class from all upload method buttons
+      const uploadMethodBtns = document.querySelectorAll('#uploadTab .tab-button');
+      uploadMethodBtns.forEach(btn => btn.classList.remove('active'));
+
+      if (method === 'file') {
+        uploadMethodBtns[0].classList.add('active');
+        qs('#fileUploadSection').style.display = 'block';
+        qs('#urlUploadSection').style.display = 'none';
+      } else if (method === 'url') {
+        uploadMethodBtns[1].classList.add('active');
+        qs('#fileUploadSection').style.display = 'none';
+        qs('#urlUploadSection').style.display = 'block';
+      }
+    }
+
+    // URL Upload handling
+    qs('#uploadUrlBtn')?.addEventListener('click', async () => {
+      const access_token = qs('#accessToken').value.trim();
+      const advertiser_id = qs('#advertiserId').value.trim();
+      const video_url = qs('#videoUrl').value.trim();
+      const file_name = qs('#urlFileName').value.trim();
+
+      if (!access_token) {
+        alert('Please enter Access Token at the top of the form');
+        qs('#accessToken').focus();
+        return;
+      }
+      if (!advertiser_id) {
+        alert('Please enter Advertiser ID in the form above');
+        qs('#advertiserId').focus();
+        return;
+      }
+      if (!video_url) {
+        alert('Please enter a video URL');
+        qs('#videoUrl').focus();
+        return;
+      }
+      if (!file_name) {
+        alert('Please enter a file name');
+        qs('#urlFileName').focus();
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('access_token', access_token);
+      formData.append('advertiser_id', advertiser_id);
+      formData.append('video_url', video_url);
+      formData.append('file_name', file_name);
+      formData.append('upload_type', 'UPLOAD_BY_URL');
+
+      qs('#urlUploadStatus').textContent = 'Uploading from URL... Please wait.';
+      qs('#urlUploadStatus').style.color = '#1a73e8';
+      qs('#uploadUrlBtn').disabled = true;
+      qs('#uploadUrlBtn').textContent = 'Uploading...';
+
+      try {
+        console.log('Uploading video from URL:', {
+          access_token: access_token.substring(0, 10) + '...',
+          advertiser_id,
+          video_url,
+          file_name
+        });
+
+        const response = await fetch('/api/upload_video_file', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await response.json();
+        console.log('URL Upload response:', data);
+
+        if (data?.data?.video_id || data?.data?.id) {
+          const videoId = data.data.video_id || data.data.id;
+          qs('#urlUploadStatus').textContent = `✅ Upload successful! Video ID: ${videoId}`;
+          qs('#urlUploadStatus').style.color = '#10b981';
+          // Add to selected videos
+          selectedVideos.push(videoId);
+          qs('#selectedCount').textContent = selectedVideos.length;
+          // Clear the inputs
+          qs('#videoUrl').value = '';
+          qs('#urlFileName').value = '';
+          // Reload the video grid to show the new video
+          setTimeout(() => {
+            loadUserVideos();
+            switchVideoTab('library');
+          }, 2000);
+        } else if (data?.code === '0' || data?.code === 0) {
+          // TikTok API returns code 0 for success
+          qs('#urlUploadStatus').textContent = '✅ Upload initiated successfully. Check your video library.';
+          qs('#urlUploadStatus').style.color = '#10b981';
+          setTimeout(() => {
+            loadUserVideos();
+            switchVideoTab('library');
+          }, 2000);
+        } else {
+          qs('#urlUploadStatus').textContent = `Failed: ${data?.message || data?.error || 'Unknown error'}`;
+          qs('#urlUploadStatus').style.color = '#dc2626';
+          console.error('URL Upload failed:', data);
+
+          // Show more detailed error info
+          if (data?.details) {
+            qs('#urlUploadStatus').innerHTML += `<br><small>${data.details}</small>`;
+          }
+        }
+      } catch (error) {
+        qs('#urlUploadStatus').textContent = `Error: ${error.message}`;
+        qs('#urlUploadStatus').style.color = '#dc2626';
+        console.error('URL Upload error:', error);
+      } finally {
+        // Re-enable the upload button
+        qs('#uploadUrlBtn').disabled = false;
+        qs('#uploadUrlBtn').textContent = 'Upload from URL';
+      }
+    });
+
+    // Make functions global
     window.switchVideoTab = switchVideoTab;
+    window.switchUploadMethod = switchUploadMethod;
 
     qs("#generateBtn").addEventListener("click", createTask);
     qs("#listBtn").addEventListener("click", listScripts);
