@@ -391,18 +391,27 @@ def get_assets_videos():
     page_size = int(request.args.get("page_size", 20))
 
     try:
+        params = {
+            "advertiser_id": advertiser_id,
+            "page": page,
+            "page_size": page_size
+        }
+
+        print(f"Fetching videos with params: {params}")
+
         r = requests.get(
             f"{TIKTOK_BASE}/file/video/ad/search/",
             headers={"Access-Token": access_token},
-            params={
-                "advertiser_id": advertiser_id,
-                "page": page,
-                "page_size": page_size
-            },
+            params=params,
             timeout=30,
         )
-        return jsonify(r.json()), r.status_code
+
+        response_data = r.json()
+        print(f"TikTok video search response: {response_data}")
+
+        return jsonify(response_data), r.status_code
     except requests.RequestException as e:
+        print(f"Request error in get_assets_videos: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.post("/api/upload_video_to_ads")
