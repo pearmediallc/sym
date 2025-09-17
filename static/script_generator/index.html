@@ -851,12 +851,14 @@
 
       qs('#videoLoadStatus').textContent = 'Loading your TikTok videos...';
 
-      qs('#refreshVideosBtn').disabled = true;
-      qs('#refreshVideosBtn').textContent = '🔄 Loading...';
+      if (qs('#refreshVideosBtn')) {
+        qs('#refreshVideosBtn').disabled = true;
+        qs('#refreshVideosBtn').textContent = '🔄 Loading...';
+      }
 
       try {
         // Use larger page size to get more videos
-        const response = await fetch(`/api/get_assets_videos?access_token=${encodeURIComponent(access_token)}&advertiser_id=${encodeURIComponent(advertiser_id)}&page_size=200&page=1`);
+        const response = await fetch(`/api/get_assets_videos?access_token=${encodeURIComponent(access_token)}&advertiser_id=${encodeURIComponent(advertiser_id)}&page_size=100&page=1`);
         const data = await response.json();
 
         console.log('Full TikTok video search response:', data);
@@ -870,45 +872,45 @@
           page_info: data?.data?.page_info
         });
 
-        if (data?.data?.list && data.data.list.length > 0) {
-          displayVideoGrid(data.data.list);
-          const pageInfo = data.data.page_info;
-          const totalCount = pageInfo?.total_number || data.data.list.length;
-          qs('#videoLoadStatus').textContent = `Showing ${data.data.list.length} of ${totalCount} total videos from your TikTok account`;
-        } else if (data?.data?.list && data.data.list.length === 0) {
-          const pageInfo = data.data.page_info;
-          if (pageInfo?.total_number > 0) {
-            qs('#videoLoadStatus').textContent = `Found ${pageInfo.total_number} videos but none on this page. Try refreshing.`;
+        // Handle successful response with code "0" (TikTok uses string "0" for success)
+        if ((data?.code === '0' || data?.code === 0 || data?.code === "OK") && data?.data) {
+          const videoList = data.data.list || [];
+          const pageInfo = data.data.page_info || {};
+
+          console.log(`Found ${videoList.length} videos, Total: ${pageInfo.total_number || videoList.length}`);
+
+          if (videoList.length > 0) {
+            displayVideoGrid(videoList);
+            const totalCount = pageInfo.total_number || videoList.length;
+            qs('#videoLoadStatus').textContent = `Showing ${videoList.length} of ${totalCount} videos from your TikTok Ads library`;
           } else {
-            qs('#videoLoadStatus').textContent = 'No videos found in your TikTok account. Upload some videos first.';
-          }
-          qs('#videoGrid').innerHTML = '';
-        } else if (data?.code === '0' || data?.code === 0) {
-          // TikTok returns code 0 for success, check if videos exist
-          if (data?.data && Object.keys(data.data).length > 0) {
-            // If data exists but not in list format, try to parse it
-            const videos = data.data.videos || data.data.video_list || data.data.materials || [];
-            if (videos.length > 0) {
-              displayVideoGrid(videos);
-              qs('#videoLoadStatus').textContent = `Showing ${videos.length} videos from your TikTok account`;
+            // No videos found
+            if (pageInfo.total_number > 0) {
+              qs('#videoLoadStatus').textContent = `${pageInfo.total_number} videos exist but not on this page. Try refreshing.`;
             } else {
-              qs('#videoLoadStatus').textContent = 'API returned success but no videos found. The videos might still be processing.';
-              qs('#videoGrid').innerHTML = '';
+              qs('#videoLoadStatus').textContent = 'No videos found in your TikTok Ads library yet. Videos you upload will appear here.';
             }
-          } else {
-            qs('#videoLoadStatus').textContent = 'No video data returned. Videos might still be processing or try refreshing.';
-            qs('#videoGrid').innerHTML = '';
+            qs('#videoGrid').innerHTML = '<p style="text-align: center; padding: 40px; color: #999;">No videos to display. Upload a video to get started.</p>';
           }
+        } else if (data?.message) {
+          // Handle error response
+          qs('#videoLoadStatus').textContent = `Error: ${data.message}`;
+          qs('#videoGrid').innerHTML = '';
+          console.error('TikTok API Error:', data);
         } else {
-          qs('#videoLoadStatus').textContent = `Error: ${data?.message || data?.error || 'Failed to load videos'}`;
-          console.error('API Error:', data);
+          // Unknown response format
+          qs('#videoLoadStatus').textContent = 'Unexpected response format. Check console for details.';
+          qs('#videoGrid').innerHTML = '';
+          console.error('Unexpected response:', data);
         }
       } catch (error) {
         qs('#videoLoadStatus').textContent = `Error: ${error.message}`;
         console.error('Error loading videos:', error);
       } finally {
-        qs('#refreshVideosBtn').disabled = false;
-        qs('#refreshVideosBtn').textContent = '🔄 Refresh';
+        if (qs('#refreshVideosBtn')) {
+          qs('#refreshVideosBtn').disabled = false;
+          qs('#refreshVideosBtn').textContent = '🔄 Refresh';
+        }
       }
     }
 
@@ -951,13 +953,22 @@
         return;
       }
 
-      videos.forEach(video => {
+      videos.forEach((video, index) => {
         const item = document.createElement('div');
         item.className = 'video-item';
+
         // Handle different ID formats from TikTok API
-        const videoId = video.video_id || video.id || video.material_id;
-        const videoName = video.file_name || video.display_name || video.name || videoId;
-        const coverUrl = video.cover_url || video.video_cover_url || video.poster_url || video.thumbnail_url || '';
+        const videoId = video.video_id || video.id || video.material_id || video.file_id;
+        const videoName = video.file_name || video.display_name || video.name || `Video ${index + 1}`;
+        const coverUrl = video.cover_url || video.video_cover_url || video.poster_url || video.thumbnail_url || video.preview_url || '';
+
+        // Additional debug info
+        console.log(`Video ${index}:`, {
+          id: videoId,
+          name: videoName,
+          cover: coverUrl,
+          raw: video
+        });
 
         const isChecked = selectedVideos.includes(videoId) ? 'checked' : '';
         item.innerHTML = `
@@ -965,6 +976,7 @@
           <img src="${coverUrl}" alt="${videoName}" class="video-thumbnail" onerror="this.src='data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23f0f0f0"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" fill="%23999" font-size="12"%3ENo Preview%3C/text%3E%3C/svg%3E'" />
           <div class="video-name" title="${videoName}">${videoName}</div>
         `;
+
         if (isChecked) item.classList.add('selected');
         grid.appendChild(item);
       });
