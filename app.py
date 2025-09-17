@@ -454,14 +454,44 @@ def upload_video_to_ads():
     except requests.RequestException as e:
         return jsonify({"error": str(e)}), 500
 
+@app.get("/api/get_video_upload_signature")
+def get_video_upload_signature():
+    """
+    Get video upload signature from TikTok.
+    Query params:
+    - access_token
+    - advertiser_id
+    """
+    access_token = (request.args.get("access_token") or "").strip()
+    advertiser_id = (request.args.get("advertiser_id") or "").strip()
+
+    if not access_token:
+        return jsonify({"error": "access_token is required"}), 400
+    if not advertiser_id:
+        return jsonify({"error": "advertiser_id is required"}), 400
+
+    try:
+        # Get upload signature
+        r = requests.get(
+            f"{TIKTOK_BASE}/file/video/ad/upload/",
+            headers={"Access-Token": access_token},
+            params={"advertiser_id": advertiser_id},
+            timeout=30,
+        )
+        return jsonify(r.json()), r.status_code
+    except requests.RequestException as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.post("/api/upload_video_file")
 def upload_video_file():
     """
     Upload a video file from local computer to TikTok.
+    Supports both file upload with signature and URL upload.
     Multipart form data with:
     - access_token
     - advertiser_id
-    - video_file (the actual file)
+    - video_file (the actual file) OR video_url
+    - video_signature (for file upload)
     - upload_type: "UPLOAD_BY_FILE" or "UPLOAD_BY_URL"
     """
     import requests
@@ -477,12 +507,17 @@ def upload_video_file():
     if not advertiser_id:
         return jsonify({"error": "Missing advertiser_id"}), 400
 
-    if upload_type == "UPLOAD_BY_FILE" and 'video_file' not in request.files:
-        return jsonify({"error": "No video file provided"}), 400
+    if upload_type == "UPLOAD_BY_FILE":
+        if 'video_file' not in request.files:
+            return jsonify({"error": "No video file provided"}), 400
+        video_signature = request.form.get("video_signature", "").strip()
+        if not video_signature:
+            return jsonify({"error": "video_signature is required for file upload"}), 400
 
     try:
         if upload_type == "UPLOAD_BY_FILE":
             video_file = request.files['video_file']
+            video_signature = request.form.get("video_signature", "").strip()
 
             # Save file temporarily
             with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(video_file.filename)[1]) as tmp_file:
@@ -492,13 +527,14 @@ def upload_video_file():
             try:
                 # Open the file in binary mode
                 with open(tmp_path, 'rb') as f:
-                    # Prepare multipart form data with correct field names
+                    # Prepare multipart form data with signature
                     files = {
                         'video_file': (video_file.filename, f, video_file.content_type or 'video/mp4')
                     }
 
                     data = {
                         'advertiser_id': advertiser_id,
+                        'video_signature': video_signature,
                         'upload_type': 'UPLOAD_BY_FILE',
                         'file_name': video_file.filename,
                         'flaw_detect': 'true',
