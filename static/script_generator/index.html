@@ -953,24 +953,42 @@
       }
       if (!file) { alert('Please select a video file'); return; }
 
-      const formData = new FormData();
-      formData.append('access_token', access_token);
-      formData.append('advertiser_id', advertiser_id);
-      formData.append('video_file', file);
-      formData.append('upload_type', 'UPLOAD_BY_FILE');
-      formData.append('file_name', file.name);
-
-      qs('#uploadStatus').textContent = 'Uploading video... Please wait, this may take a few moments.';
+      qs('#uploadStatus').textContent = 'Getting upload signature...';
       qs('#uploadStatus').style.color = '#1a73e8';
       qs('#uploadVideoBtn').disabled = true;
-      qs('#uploadVideoBtn').textContent = 'Uploading...';
+      qs('#uploadVideoBtn').textContent = 'Preparing upload...';
 
       try {
-        console.log('Uploading video with:', {
+        // First, get the upload signature
+        const signatureResponse = await fetch(`/api/get_video_upload_signature?access_token=${encodeURIComponent(access_token)}&advertiser_id=${encodeURIComponent(advertiser_id)}`);
+        const signatureData = await signatureResponse.json();
+
+        console.log('Signature response:', signatureData);
+
+        if (!signatureData?.data?.video_signature) {
+          throw new Error('Failed to get upload signature: ' + (signatureData?.message || 'Unknown error'));
+        }
+
+        const video_signature = signatureData.data.video_signature;
+
+        // Now upload with the signature
+        const formData = new FormData();
+        formData.append('access_token', access_token);
+        formData.append('advertiser_id', advertiser_id);
+        formData.append('video_file', file);
+        formData.append('video_signature', video_signature);
+        formData.append('upload_type', 'UPLOAD_BY_FILE');
+        formData.append('file_name', file.name);
+
+        qs('#uploadStatus').textContent = 'Uploading video... Please wait, this may take a few moments.';
+        qs('#uploadVideoBtn').textContent = 'Uploading...';
+
+        console.log('Uploading video with signature:', {
           access_token: access_token.substring(0, 10) + '...',
           advertiser_id,
           file_name: file.name,
-          file_size: (file.size / 1024 / 1024).toFixed(2) + ' MB'
+          file_size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
+          has_signature: !!video_signature
         });
 
         const response = await fetch('/api/upload_video_file', {
