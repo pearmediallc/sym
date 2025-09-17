@@ -831,6 +831,22 @@
         } else if (data?.data?.list && data.data.list.length === 0) {
           qs('#videoLoadStatus').textContent = 'No videos found in your TikTok account. Upload some videos first.';
           qs('#videoGrid').innerHTML = '';
+        } else if (data?.code === '0' || data?.code === 0) {
+          // TikTok returns code 0 for success, check if videos exist
+          if (data?.data && Object.keys(data.data).length > 0) {
+            // If data exists but not in list format, try to parse it
+            const videos = data.data.videos || data.data.video_list || [];
+            if (videos.length > 0) {
+              displayVideoGrid(videos);
+              qs('#videoLoadStatus').textContent = `Showing ${videos.length} videos from your TikTok account`;
+            } else {
+              qs('#videoLoadStatus').textContent = 'No videos found. Upload a video to get started.';
+              qs('#videoGrid').innerHTML = '';
+            }
+          } else {
+            qs('#videoLoadStatus').textContent = 'No videos found in your account yet.';
+            qs('#videoGrid').innerHTML = '';
+          }
         } else {
           qs('#videoLoadStatus').textContent = `Error: ${data?.message || 'Failed to load videos'}`;
         }
@@ -881,11 +897,16 @@
       videos.forEach(video => {
         const item = document.createElement('div');
         item.className = 'video-item';
-        const isChecked = selectedVideos.includes(video.video_id) ? 'checked' : '';
+        // Handle different ID formats from TikTok API
+        const videoId = video.video_id || video.id || video.material_id;
+        const videoName = video.file_name || video.display_name || video.name || videoId;
+        const coverUrl = video.cover_url || video.video_cover_url || video.poster_url || video.thumbnail_url || '';
+
+        const isChecked = selectedVideos.includes(videoId) ? 'checked' : '';
         item.innerHTML = `
-          <input type="checkbox" value="${video.video_id}" ${isChecked} onchange="toggleVideoSelection(this, '${video.video_id}')" />
-          <img src="${video.cover_url || video.video_cover_url || ''}" alt="${video.file_name}" class="video-thumbnail" onerror="this.src='data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23f0f0f0"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" fill="%23999" font-size="12"%3ENo Preview%3C/text%3E%3C/svg%3E'" />
-          <div class="video-name" title="${video.file_name || video.video_id}">${video.file_name || video.video_id}</div>
+          <input type="checkbox" value="${videoId}" ${isChecked} onchange="toggleVideoSelection(this, '${videoId}')" />
+          <img src="${coverUrl}" alt="${videoName}" class="video-thumbnail" onerror="this.src='data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23f0f0f0"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" fill="%23999" font-size="12"%3ENo Preview%3C/text%3E%3C/svg%3E'" />
+          <div class="video-name" title="${videoName}">${videoName}</div>
         `;
         if (isChecked) item.classList.add('selected');
         grid.appendChild(item);
@@ -936,7 +957,8 @@
       formData.append('access_token', access_token);
       formData.append('advertiser_id', advertiser_id);
       formData.append('video_file', file);
-      formData.append('upload_type', 'FILE');
+      formData.append('upload_type', 'UPLOAD_BY_FILE');
+      formData.append('file_name', file.name);
 
       qs('#uploadStatus').textContent = 'Uploading video... Please wait, this may take a few moments.';
       qs('#uploadStatus').style.color = '#1a73e8';
@@ -958,16 +980,26 @@
         const data = await response.json();
         console.log('Upload response:', data);
 
-        if (data?.data?.video_id) {
-          qs('#uploadStatus').textContent = `✅ Upload successful! Video ID: ${data.data.video_id}`;
+        if (data?.data?.video_id || data?.data?.id) {
+          const videoId = data.data.video_id || data.data.id;
+          qs('#uploadStatus').textContent = `✅ Upload successful! Video ID: ${videoId}`;
+          qs('#uploadStatus').style.color = '#10b981';
           // Add to selected videos
-          selectedVideos.push(data.data.video_id);
+          selectedVideos.push(videoId);
           qs('#selectedCount').textContent = selectedVideos.length;
           // Clear the file input
           qs('#videoFile').value = '';
           qs('#fileName').textContent = 'No file selected';
           qs('#uploadVideoBtn').style.display = 'none';
           // Reload the video grid to show the new video
+          setTimeout(() => {
+            loadUserVideos();
+            switchVideoTab('library');
+          }, 2000);
+        } else if (data?.code === '0' || data?.code === 0) {
+          // TikTok API returns code 0 for success
+          qs('#uploadStatus').textContent = '✅ Upload initiated successfully. Check your video library.';
+          qs('#uploadStatus').style.color = '#10b981';
           setTimeout(() => {
             loadUserVideos();
             switchVideoTab('library');
