@@ -215,28 +215,36 @@
 
     .video-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 16px;
       margin-top: 12px;
-      max-height: 300px;
+      max-height: 400px;
       overflow-y: auto;
+      padding: 12px;
+      background: white;
+      border-radius: 12px;
+      border: 1px solid var(--border);
     }
 
     .video-item {
       position: relative;
-      border: 2px solid var(--border);
-      border-radius: 8px;
+      border: 3px solid var(--border);
+      border-radius: 12px;
       overflow: hidden;
       cursor: pointer;
       transition: all 0.3s ease;
+      background: white;
     }
 
     .video-item:hover {
       border-color: var(--primary);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     }
 
     .video-item.selected {
       border-color: var(--primary);
+      background: linear-gradient(135deg, rgba(255,0,79,0.05), rgba(0,242,234,0.05));
       box-shadow: 0 0 0 3px rgba(255, 0, 79, 0.2);
     }
 
@@ -245,22 +253,28 @@
       top: 8px;
       left: 8px;
       z-index: 10;
-      width: 20px;
-      height: 20px;
+      width: 24px;
+      height: 24px;
+      cursor: pointer;
+      accent-color: var(--primary);
     }
 
     .video-thumbnail {
       width: 100%;
-      height: 100px;
+      height: 120px;
       object-fit: cover;
+      background: var(--gray);
     }
 
     .video-name {
-      padding: 8px;
-      font-size: 11px;
+      padding: 10px;
+      font-size: 12px;
+      font-weight: 500;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      background: white;
+      border-top: 1px solid var(--border);
     }
 
     .upload-section {
@@ -428,18 +442,17 @@
 
       <!-- Video Selection Section -->
       <div class="video-selector">
-        <h4 style="margin: 0 0 12px 0;">📹 Select Videos</h4>
+        <h4 style="margin: 0 0 12px 0;">📹 Select Your TikTok Videos</h4>
+        <p class="muted" style="margin-bottom: 12px;">Select videos from your TikTok Ads account to use in the script generation</p>
 
         <div class="tab-buttons">
-          <button class="tab-button active" onclick="switchVideoTab('assets')">TikTok Assets</button>
-          <button class="tab-button" onclick="switchVideoTab('upload')">Upload Video</button>
-          <button class="tab-button" onclick="switchVideoTab('manual')">Manual IDs</button>
+          <button class="tab-button active" onclick="switchVideoTab('library')">Your TikTok Videos</button>
+          <button class="tab-button" onclick="switchVideoTab('upload')">Upload New Video</button>
         </div>
 
-        <!-- Assets Tab -->
-        <div id="assetsTab" style="display: block;">
-          <button id="loadAssetsBtn" class="btn-secondary" style="width: auto; margin-bottom: 12px;">Load Videos from Assets</button>
-          <div id="assetsStatus" class="muted"></div>
+        <!-- Library Tab - Shows user's TikTok videos -->
+        <div id="libraryTab" style="display: block;">
+          <div id="videoLoadStatus" class="muted" style="margin-bottom: 12px;">Loading your videos...</div>
           <div id="videoGrid" class="video-grid"></div>
           <p class="muted" style="margin-top: 8px;">Selected: <span id="selectedCount">0</span> video(s)</p>
         </div>
@@ -454,24 +467,8 @@
             <p id="uploadStatus" class="muted" style="margin-top: 8px;"></p>
           </div>
         </div>
-
-        <!-- Manual IDs Tab -->
-        <div id="manualTab" style="display: none;">
-          <div class="row">
-            <div class="col">
-              <label>Video IDs (comma-separated)</label>
-              <input id="pVideos" placeholder="v10033g5..., v10033g5..." />
-            </div>
-          </div>
-        </div>
       </div>
 
-      <div class="row" style="margin-top:12px;">
-        <div class="col">
-          <label>Image URLs (comma-separated)</label>
-          <input id="pImages" placeholder="https://..., https://..." />
-        </div>
-      </div>
     </div>
 
     <div class="row" style="margin-top:16px;">
@@ -524,6 +521,11 @@
       const mode = e.target.value;
       qs("#customArea").style.display = mode === "CUSTOM" ? "" : "none";
       qs("#productArea").style.display = mode === "PRODUCT" ? "" : "none";
+
+      // Auto-load videos when switching to PRODUCT mode
+      if (mode === "PRODUCT") {
+        loadUserVideos();
+      }
     });
 
     function renderScripts(list, pageInfo = null) {
@@ -642,22 +644,16 @@
         const description = qs("#pDesc").value.trim();
         const sps = (qs("#pSps").value || "").split(",").map(s => s.trim()).filter(Boolean).slice(0, 10);
         const video_duration = qs("#pDur").value;
-        // Get videos based on active tab
-        let vids = [];
-        const activeTab = document.querySelector('#assetsTab').style.display === 'block' ? 'assets' :
-                         document.querySelector('#uploadTab').style.display === 'block' ? 'upload' : 'manual';
-
-        if (activeTab === 'assets' || activeTab === 'upload') {
-          vids = selectedVideos; // Use selected videos from grid or uploaded
-        } else {
-          // Manual IDs
-          vids = (qs("#pVideos").value || "").split(",").map(s => s.trim()).filter(Boolean);
-        }
-
-        const imgs = (qs("#pImages").value || "").split(",").map(s => s.trim()).filter(Boolean);
+        // Always use selected videos from the grid (no manual ID entry)
+        let vids = selectedVideos;
 
         if (!name || !brand || !description) {
           alert("Please fill Product Name, Brand and Description");
+          return;
+        }
+
+        if (vids.length === 0) {
+          alert("Please select at least one video from your TikTok account");
           return;
         }
 
@@ -666,10 +662,10 @@
           description, selling_points: sps
         };
         if (video_duration) body.video_duration = video_duration;
-        if (vids.length || imgs.length) {
-          body.media_list = {};
-          if (vids.length) body.media_list.video_id_list = vids;
-          if (imgs.length) body.media_list.image_url_list = imgs;
+        if (vids.length) {
+          body.media_list = {
+            video_id_list: vids
+          };
         }
       }
 
@@ -771,9 +767,8 @@
 
     function switchVideoTab(tab) {
       // Hide all tabs
-      qs('#assetsTab').style.display = 'none';
+      qs('#libraryTab').style.display = 'none';
       qs('#uploadTab').style.display = 'none';
-      qs('#manualTab').style.display = 'none';
 
       // Remove active class from all buttons
       document.querySelectorAll('.tab-button').forEach(btn => {
@@ -781,40 +776,50 @@
       });
 
       // Show selected tab and activate button
-      if (tab === 'assets') {
-        qs('#assetsTab').style.display = 'block';
+      if (tab === 'library') {
+        qs('#libraryTab').style.display = 'block';
         document.querySelectorAll('.tab-button')[0].classList.add('active');
+        loadUserVideos(); // Reload videos when switching to library tab
       } else if (tab === 'upload') {
         qs('#uploadTab').style.display = 'block';
         document.querySelectorAll('.tab-button')[1].classList.add('active');
-      } else if (tab === 'manual') {
-        qs('#manualTab').style.display = 'block';
-        document.querySelectorAll('.tab-button')[2].classList.add('active');
       }
     }
 
-    // Load videos from TikTok assets
-    qs('#loadAssetsBtn')?.addEventListener('click', async () => {
+    // Auto-load user's TikTok videos
+    async function loadUserVideos() {
       const access_token = qs('#accessToken').value.trim();
       const advertiser_id = qs('#advertiserId').value.trim();
 
-      if (!access_token) { alert('Please enter Access Token'); return; }
-      if (!advertiser_id) { alert('Please enter Advertiser ID'); return; }
+      if (!access_token || !advertiser_id) {
+        qs('#videoLoadStatus').textContent = 'Enter Access Token and Advertiser ID above to see your videos';
+        return;
+      }
 
-      qs('#assetsStatus').textContent = 'Loading videos from assets...';
+      qs('#videoLoadStatus').textContent = 'Loading your TikTok videos...';
 
       try {
-        const response = await fetch(`/api/get_assets_videos?access_token=${encodeURIComponent(access_token)}&advertiser_id=${encodeURIComponent(advertiser_id)}&page_size=50`);
+        const response = await fetch(`/api/get_assets_videos?access_token=${encodeURIComponent(access_token)}&advertiser_id=${encodeURIComponent(advertiser_id)}&page_size=100`);
         const data = await response.json();
 
-        if (data?.data?.list) {
+        if (data?.data?.list && data.data.list.length > 0) {
           displayVideoGrid(data.data.list);
-          qs('#assetsStatus').textContent = `Found ${data.data.list.length} videos in your assets`;
+          qs('#videoLoadStatus').textContent = `Showing ${data.data.list.length} videos from your TikTok account`;
+        } else if (data?.data?.list && data.data.list.length === 0) {
+          qs('#videoLoadStatus').textContent = 'No videos found in your TikTok account. Upload some videos first.';
+          qs('#videoGrid').innerHTML = '';
         } else {
-          qs('#assetsStatus').textContent = 'Failed to load videos';
+          qs('#videoLoadStatus').textContent = `Error: ${data?.message || 'Failed to load videos'}`;
         }
       } catch (error) {
-        qs('#assetsStatus').textContent = `Error: ${error.message}`;
+        qs('#videoLoadStatus').textContent = `Error: ${error.message}`;
+      }
+    }
+
+    // Listen for advertiser ID changes to reload videos
+    qs('#advertiserId')?.addEventListener('blur', () => {
+      if (qs('#mode').value === 'PRODUCT') {
+        loadUserVideos();
       }
     });
 
@@ -822,14 +827,21 @@
       const grid = qs('#videoGrid');
       grid.innerHTML = '';
 
+      if (!videos || videos.length === 0) {
+        grid.innerHTML = '<p class="muted" style="text-align: center; padding: 20px;">No videos available</p>';
+        return;
+      }
+
       videos.forEach(video => {
         const item = document.createElement('div');
         item.className = 'video-item';
+        const isChecked = selectedVideos.includes(video.video_id) ? 'checked' : '';
         item.innerHTML = `
-          <input type="checkbox" value="${video.video_id}" onchange="toggleVideoSelection(this, '${video.video_id}')" />
-          <img src="${video.cover_url || ''}" alt="${video.file_name}" class="video-thumbnail" />
-          <div class="video-name">${video.file_name || video.video_id}</div>
+          <input type="checkbox" value="${video.video_id}" ${isChecked} onchange="toggleVideoSelection(this, '${video.video_id}')" />
+          <img src="${video.cover_url || video.video_cover_url || ''}" alt="${video.file_name}" class="video-thumbnail" onerror="this.src='data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23f0f0f0"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" fill="%23999" font-size="12"%3ENo Preview%3C/text%3E%3C/svg%3E'" />
+          <div class="video-name" title="${video.file_name || video.video_id}">${video.file_name || video.video_id}</div>
         `;
+        if (isChecked) item.classList.add('selected');
         grid.appendChild(item);
       });
     }
