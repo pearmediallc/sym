@@ -460,26 +460,37 @@
         <!-- Upload Tab -->
         <div id="uploadTab" style="display: none;">
           <div class="tab-buttons" style="margin-bottom: 16px;">
+            <button class="tab-button active" onclick="switchMediaType('video')">Video</button>
+            <button class="tab-button" onclick="switchMediaType('image')">Image</button>
+          </div>
+
+          <div class="tab-buttons" style="margin-bottom: 16px;">
             <button class="tab-button active" onclick="switchUploadMethod('file')">Upload File</button>
             <button class="tab-button" onclick="switchUploadMethod('url')">Upload from URL</button>
           </div>
 
           <!-- File Upload -->
           <div id="fileUploadSection" class="upload-section">
-            <input type="file" id="videoFile" accept="video/*" style="display: none;" />
-            <button class="btn-primary" onclick="document.getElementById('videoFile').click()">Choose Video File</button>
+            <input type="file" id="mediaFile" accept="video/*,image/*" style="display: none;" />
+            <button class="btn-primary" onclick="document.getElementById('mediaFile').click()">
+              <span id="chooseFileText">Choose Video File</span>
+            </button>
             <p id="fileName" class="muted" style="margin-top: 12px;">No file selected</p>
-            <button id="uploadVideoBtn" class="btn-success" style="display: none; margin-top: 12px;">Upload to TikTok Ads</button>
+            <button id="uploadFileBtn" class="btn-success" style="display: none; margin-top: 12px;">
+              <span id="uploadFileText">Upload to TikTok Ads</span>
+            </button>
             <p id="uploadStatus" class="muted" style="margin-top: 8px;"></p>
           </div>
 
           <!-- URL Upload -->
           <div id="urlUploadSection" class="upload-section" style="display: none;">
-            <label>Video URL</label>
-            <input type="url" id="videoUrl" placeholder="https://example.com/video.mp4" style="margin-top: 8px;" />
+            <label id="urlLabel">Video URL</label>
+            <input type="url" id="mediaUrl" placeholder="https://example.com/video.mp4" style="margin-top: 8px;" />
             <label style="margin-top: 12px;">File Name</label>
             <input type="text" id="urlFileName" placeholder="video.mp4" style="margin-top: 8px;" />
-            <button id="uploadUrlBtn" class="btn-success" style="margin-top: 12px;">Upload from URL</button>
+            <button id="uploadUrlBtn" class="btn-success" style="margin-top: 12px;">
+              <span id="uploadUrlText">Upload Video from URL</span>
+            </button>
             <p id="urlUploadStatus" class="muted" style="margin-top: 8px;"></p>
           </div>
         </div>
@@ -944,18 +955,18 @@
     };
 
     // File upload handling
-    qs('#videoFile')?.addEventListener('change', (e) => {
+    qs('#mediaFile')?.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (file) {
         qs('#fileName').textContent = `Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
-        qs('#uploadVideoBtn').style.display = 'inline-block';
+        qs('#uploadFileBtn').style.display = 'inline-block';
       }
     });
 
-    qs('#uploadVideoBtn')?.addEventListener('click', async () => {
+    qs('#uploadFileBtn')?.addEventListener('click', async () => {
       const access_token = qs('#accessToken').value.trim();
       const advertiser_id = qs('#advertiserId').value.trim();
-      const file = qs('#videoFile').files[0];
+      const file = qs('#mediaFile').files[0];
 
       if (!access_token) {
         alert('Please enter Access Token at the top of the form');
@@ -975,62 +986,72 @@
       qs('#uploadVideoBtn').textContent = 'Preparing upload...';
 
       try {
-        // For file uploads, we'll show a message that URL upload is recommended
-        qs('#uploadStatus').textContent = 'Note: For better reliability, consider using "Upload from URL" tab. Attempting file upload...';
-        qs('#uploadStatus').style.color = '#eab308';
+        // Determine upload endpoint and field names based on media type
+        const isVideo = currentMediaType === 'video';
+        const uploadEndpoint = isVideo ? '/api/upload_video_file' : '/api/upload_image_file';
+        const fileFieldName = isVideo ? 'video_file' : 'image_file';
 
-        // Try direct file upload without signature first
         const formData = new FormData();
         formData.append('access_token', access_token);
         formData.append('advertiser_id', advertiser_id);
-        formData.append('video_file', file);
+        formData.append(fileFieldName, file);
         formData.append('upload_type', 'UPLOAD_BY_FILE');
         formData.append('file_name', file.name);
-        formData.append('flaw_detect', 'true');
-        formData.append('auto_fix_enabled', 'true');
-        formData.append('auto_bind_enabled', 'true');
 
-        qs('#uploadStatus').textContent = 'Uploading video file... Please wait, this may take a few moments.';
+        if (isVideo) {
+          formData.append('flaw_detect', 'true');
+          formData.append('auto_fix_enabled', 'true');
+          formData.append('auto_bind_enabled', 'true');
+        }
+
+        qs('#uploadStatus').textContent = `Uploading ${currentMediaType} file... Please wait, this may take a few moments.`;
         qs('#uploadStatus').style.color = '#1a73e8';
-        qs('#uploadVideoBtn').textContent = 'Uploading...';
+        qs('#uploadFileBtn').textContent = 'Uploading...';
 
-        console.log('Uploading video file:', {
+        console.log(`Uploading ${currentMediaType} file:`, {
           access_token: access_token.substring(0, 10) + '...',
           advertiser_id,
           file_name: file.name,
-          file_size: (file.size / 1024 / 1024).toFixed(2) + ' MB'
+          file_size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
+          media_type: currentMediaType
         });
 
-        const response = await fetch('/api/upload_video_file', {
+        const response = await fetch(uploadEndpoint, {
           method: 'POST',
           body: formData
         });
         const data = await response.json();
-        console.log('Upload response:', data);
+        console.log(`${currentMediaType} upload response:`, data);
 
-        if (data?.data?.video_id || data?.data?.id) {
-          const videoId = data.data.video_id || data.data.id;
-          qs('#uploadStatus').textContent = `✅ Upload successful! Video ID: ${videoId}`;
+        const mediaId = data?.data?.video_id || data?.data?.image_id || data?.data?.id;
+        if (mediaId) {
+          qs('#uploadStatus').textContent = `✅ Upload successful! ${currentMediaType.charAt(0).toUpperCase() + currentMediaType.slice(1)} ID: ${mediaId}`;
           qs('#uploadStatus').style.color = '#10b981';
-          // Add to selected videos
-          selectedVideos.push(videoId);
-          qs('#selectedCount').textContent = selectedVideos.length;
+          // Add to selected videos (if video)
+          if (currentMediaType === 'video') {
+            selectedVideos.push(mediaId);
+            qs('#selectedCount').textContent = selectedVideos.length;
+          }
           // Clear the file input
-          qs('#videoFile').value = '';
+          qs('#mediaFile').value = '';
           qs('#fileName').textContent = 'No file selected';
-          qs('#uploadVideoBtn').style.display = 'none';
-          // Reload the video grid to show the new video
+          qs('#uploadFileBtn').style.display = 'none';
+          // Reload the video grid to show the new media
           setTimeout(() => {
-            loadUserVideos();
-            switchVideoTab('library');
+            if (currentMediaType === 'video') {
+              loadUserVideos();
+              switchVideoTab('library');
+            }
           }, 2000);
         } else if (data?.code === '0' || data?.code === 0) {
           // TikTok API returns code 0 for success
-          qs('#uploadStatus').textContent = '✅ Upload initiated successfully. Check your video library.';
+          qs('#uploadStatus').textContent = `✅ ${currentMediaType.charAt(0).toUpperCase() + currentMediaType.slice(1)} upload initiated successfully. Check your library.`;
           qs('#uploadStatus').style.color = '#10b981';
           setTimeout(() => {
-            loadUserVideos();
-            switchVideoTab('library');
+            if (currentMediaType === 'video') {
+              loadUserVideos();
+              switchVideoTab('library');
+            }
           }, 2000);
         } else {
           qs('#uploadStatus').textContent = `Failed: ${data?.message || data?.error || 'Unknown error'}`;
@@ -1048,23 +1069,63 @@
         console.error('Upload error:', error);
       } finally {
         // Re-enable the upload button
-        qs('#uploadVideoBtn').disabled = false;
-        qs('#uploadVideoBtn').textContent = 'Upload to TikTok Ads';
+        qs('#uploadFileBtn').disabled = false;
+        qs('#uploadFileBtn').textContent = currentMediaType === 'video' ? 'Upload Video to TikTok Ads' : 'Upload Image to TikTok Ads';
       }
     });
 
-    // Upload method switching
+    // Global variables for current upload type
+    let currentMediaType = 'video'; // 'video' or 'image'
+    let currentUploadMethod = 'file'; // 'file' or 'url'
+
+    // Media type switching (Video/Image)
+    function switchMediaType(type) {
+      currentMediaType = type;
+
+      // Remove active class from media type buttons
+      const mediaTypeBtns = document.querySelectorAll('#uploadTab .tab-button');
+      mediaTypeBtns.forEach((btn, index) => {
+        if (index < 2) btn.classList.remove('active');
+      });
+
+      // Update UI text and placeholders based on media type
+      if (type === 'video') {
+        mediaTypeBtns[0].classList.add('active');
+        qs('#chooseFileText').textContent = 'Choose Video File';
+        qs('#uploadFileText').textContent = 'Upload Video to TikTok Ads';
+        qs('#urlLabel').textContent = 'Video URL';
+        qs('#mediaUrl').placeholder = 'https://example.com/video.mp4';
+        qs('#urlFileName').placeholder = 'video.mp4';
+        qs('#uploadUrlText').textContent = 'Upload Video from URL';
+        qs('#mediaFile').accept = 'video/*';
+      } else if (type === 'image') {
+        mediaTypeBtns[1].classList.add('active');
+        qs('#chooseFileText').textContent = 'Choose Image File';
+        qs('#uploadFileText').textContent = 'Upload Image to TikTok Ads';
+        qs('#urlLabel').textContent = 'Image URL';
+        qs('#mediaUrl').placeholder = 'https://example.com/image.jpg';
+        qs('#urlFileName').placeholder = 'image.jpg';
+        qs('#uploadUrlText').textContent = 'Upload Image from URL';
+        qs('#mediaFile').accept = 'image/*';
+      }
+    }
+
+    // Upload method switching (File/URL)
     function switchUploadMethod(method) {
-      // Remove active class from all upload method buttons
+      currentUploadMethod = method;
+
+      // Remove active class from upload method buttons (indices 2-3)
       const uploadMethodBtns = document.querySelectorAll('#uploadTab .tab-button');
-      uploadMethodBtns.forEach(btn => btn.classList.remove('active'));
+      uploadMethodBtns.forEach((btn, index) => {
+        if (index >= 2) btn.classList.remove('active');
+      });
 
       if (method === 'file') {
-        uploadMethodBtns[0].classList.add('active');
+        uploadMethodBtns[2].classList.add('active');
         qs('#fileUploadSection').style.display = 'block';
         qs('#urlUploadSection').style.display = 'none';
       } else if (method === 'url') {
-        uploadMethodBtns[1].classList.add('active');
+        uploadMethodBtns[3].classList.add('active');
         qs('#fileUploadSection').style.display = 'none';
         qs('#urlUploadSection').style.display = 'block';
       }
@@ -1074,7 +1135,7 @@
     qs('#uploadUrlBtn')?.addEventListener('click', async () => {
       const access_token = qs('#accessToken').value.trim();
       const advertiser_id = qs('#advertiserId').value.trim();
-      const video_url = qs('#videoUrl').value.trim();
+      const media_url = qs('#mediaUrl').value.trim();
       const file_name = qs('#urlFileName').value.trim();
 
       if (!access_token) {
@@ -1087,9 +1148,9 @@
         qs('#advertiserId').focus();
         return;
       }
-      if (!video_url) {
-        alert('Please enter a video URL');
-        qs('#videoUrl').focus();
+      if (!media_url) {
+        alert(`Please enter a ${currentMediaType} URL`);
+        qs('#mediaUrl').focus();
         return;
       }
       if (!file_name) {
@@ -1098,10 +1159,14 @@
         return;
       }
 
+      const isVideo = currentMediaType === 'video';
+      const uploadEndpoint = isVideo ? '/api/upload_video_file' : '/api/upload_image_file';
+      const urlFieldName = isVideo ? 'video_url' : 'image_url';
+
       const formData = new FormData();
       formData.append('access_token', access_token);
       formData.append('advertiser_id', advertiser_id);
-      formData.append('video_url', video_url);
+      formData.append(urlFieldName, media_url);
       formData.append('file_name', file_name);
       formData.append('upload_type', 'UPLOAD_BY_URL');
 
@@ -1111,42 +1176,49 @@
       qs('#uploadUrlBtn').textContent = 'Uploading...';
 
       try {
-        console.log('Uploading video from URL:', {
+        console.log(`Uploading ${currentMediaType} from URL:`, {
           access_token: access_token.substring(0, 10) + '...',
           advertiser_id,
-          video_url,
-          file_name
+          media_url,
+          file_name,
+          media_type: currentMediaType
         });
 
-        const response = await fetch('/api/upload_video_file', {
+        const response = await fetch(uploadEndpoint, {
           method: 'POST',
           body: formData
         });
         const data = await response.json();
-        console.log('URL Upload response:', data);
+        console.log(`${currentMediaType} URL upload response:`, data);
 
-        if (data?.data?.video_id || data?.data?.id) {
-          const videoId = data.data.video_id || data.data.id;
-          qs('#urlUploadStatus').textContent = `✅ Upload successful! Video ID: ${videoId}`;
+        const mediaId = data?.data?.video_id || data?.data?.image_id || data?.data?.id;
+        if (mediaId) {
+          qs('#urlUploadStatus').textContent = `✅ Upload successful! ${currentMediaType.charAt(0).toUpperCase() + currentMediaType.slice(1)} ID: ${mediaId}`;
           qs('#urlUploadStatus').style.color = '#10b981';
-          // Add to selected videos
-          selectedVideos.push(videoId);
-          qs('#selectedCount').textContent = selectedVideos.length;
+          // Add to selected videos (if video)
+          if (currentMediaType === 'video') {
+            selectedVideos.push(mediaId);
+            qs('#selectedCount').textContent = selectedVideos.length;
+          }
           // Clear the inputs
-          qs('#videoUrl').value = '';
+          qs('#mediaUrl').value = '';
           qs('#urlFileName').value = '';
-          // Reload the video grid to show the new video
+          // Reload the video grid to show the new media
           setTimeout(() => {
-            loadUserVideos();
-            switchVideoTab('library');
+            if (currentMediaType === 'video') {
+              loadUserVideos();
+              switchVideoTab('library');
+            }
           }, 2000);
         } else if (data?.code === '0' || data?.code === 0) {
           // TikTok API returns code 0 for success
-          qs('#urlUploadStatus').textContent = '✅ Upload initiated successfully. Check your video library.';
+          qs('#urlUploadStatus').textContent = `✅ ${currentMediaType.charAt(0).toUpperCase() + currentMediaType.slice(1)} upload initiated successfully. Check your library.`;
           qs('#urlUploadStatus').style.color = '#10b981';
           setTimeout(() => {
-            loadUserVideos();
-            switchVideoTab('library');
+            if (currentMediaType === 'video') {
+              loadUserVideos();
+              switchVideoTab('library');
+            }
           }, 2000);
         } else {
           qs('#urlUploadStatus').textContent = `Failed: ${data?.message || data?.error || 'Unknown error'}`;
@@ -1171,6 +1243,7 @@
 
     // Make functions global
     window.switchVideoTab = switchVideoTab;
+    window.switchMediaType = switchMediaType;
     window.switchUploadMethod = switchUploadMethod;
 
     qs("#generateBtn").addEventListener("click", createTask);
