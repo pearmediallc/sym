@@ -462,63 +462,97 @@ def upload_video_file():
     - access_token
     - advertiser_id
     - video_file (the actual file)
-    - upload_type: "FILE" or "URL"
+    - upload_type: "UPLOAD_BY_FILE" or "UPLOAD_BY_URL"
     """
     import requests
+    import tempfile
+    import os
 
     access_token = request.form.get("access_token", "").strip()
     advertiser_id = request.form.get("advertiser_id", "").strip()
-    upload_type = request.form.get("upload_type", "FILE").strip()
+    upload_type = request.form.get("upload_type", "UPLOAD_BY_FILE").strip()
 
     if not access_token:
         return jsonify({"error": "Missing access_token"}), 400
     if not advertiser_id:
         return jsonify({"error": "Missing advertiser_id"}), 400
 
-    if upload_type == "FILE" and 'video_file' not in request.files:
+    if upload_type == "UPLOAD_BY_FILE" and 'video_file' not in request.files:
         return jsonify({"error": "No video file provided"}), 400
 
     try:
-        if upload_type == "FILE":
+        if upload_type == "UPLOAD_BY_FILE":
             video_file = request.files['video_file']
 
-            # Prepare multipart form data
-            files = {
-                'video_file': (video_file.filename, video_file.stream, video_file.content_type)
-            }
+            # Save file temporarily
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(video_file.filename)[1]) as tmp_file:
+                video_file.save(tmp_file.name)
+                tmp_path = tmp_file.name
 
-            data = {
-                'advertiser_id': advertiser_id,
-                'upload_type': 'FILE'
-            }
+            try:
+                # Open the file in binary mode
+                with open(tmp_path, 'rb') as f:
+                    # Prepare multipart form data with correct field names
+                    files = {
+                        'video_file': (video_file.filename, f, video_file.content_type or 'video/mp4')
+                    }
 
-            r = requests.post(
-                f"{TIKTOK_BASE}/file/video/ad/upload/",
-                headers={"Access-Token": access_token},
-                files=files,
-                data=data,
-                timeout=300,  # 5 minutes for large files
-            )
+                    data = {
+                        'advertiser_id': advertiser_id,
+                        'upload_type': 'UPLOAD_BY_FILE',
+                        'file_name': video_file.filename,
+                        'flaw_detect': 'true',
+                        'auto_fix_enabled': 'true',
+                        'auto_bind_enabled': 'true'
+                    }
+
+                    r = requests.post(
+                        f"{TIKTOK_BASE}/file/video/ad/upload/",
+                        headers={"Access-Token": access_token},
+                        files=files,
+                        data=data,
+                        timeout=300,  # 5 minutes for large files
+                    )
+            finally:
+                # Clean up temporary file
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
         else:
             # URL upload
             video_url = request.form.get("video_url", "").strip()
             if not video_url:
                 return jsonify({"error": "video_url is required for URL upload"}), 400
 
+            # Use correct parameters for URL upload
+            payload = {
+                "advertiser_id": advertiser_id,
+                "upload_type": "UPLOAD_BY_URL",
+                "video_url": video_url,
+                "file_name": request.form.get("file_name", "uploaded_video.mp4"),
+                "flaw_detect": True,
+                "auto_fix_enabled": True,
+                "auto_bind_enabled": True
+            }
+
             r = requests.post(
                 f"{TIKTOK_BASE}/file/video/ad/upload/",
                 headers=tt_headers(access_token),
-                json={
-                    "advertiser_id": advertiser_id,
-                    "upload_type": "URL",
-                    "video_url": video_url
-                },
+                json=payload,
                 timeout=60,
             )
 
-        return jsonify(r.json()), r.status_code
+        # Try to parse JSON response
+        try:
+            response_data = r.json()
+        except:
+            # If JSON parsing fails, return the raw text
+            return jsonify({"error": "Invalid JSON response", "raw_response": r.text}), r.status_code
+
+        return jsonify(response_data), r.status_code
     except requests.RequestException as e:
         return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
