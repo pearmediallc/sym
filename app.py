@@ -510,9 +510,12 @@ def upload_video_file():
     if upload_type == "UPLOAD_BY_FILE":
         if 'video_file' not in request.files:
             return jsonify({"error": "No video file provided"}), 400
+        # Signature is optional for file upload - let's try without it first
         video_signature = request.form.get("video_signature", "").strip()
-        if not video_signature:
-            return jsonify({"error": "video_signature is required for file upload"}), 400
+    elif upload_type == "UPLOAD_BY_URL":
+        video_url = request.form.get("video_url", "").strip()
+        if not video_url:
+            return jsonify({"error": "video_url is required for URL upload"}), 400
 
     try:
         if upload_type == "UPLOAD_BY_FILE":
@@ -534,13 +537,16 @@ def upload_video_file():
 
                     data = {
                         'advertiser_id': advertiser_id,
-                        'video_signature': video_signature,
                         'upload_type': 'UPLOAD_BY_FILE',
                         'file_name': video_file.filename,
                         'flaw_detect': 'true',
                         'auto_fix_enabled': 'true',
                         'auto_bind_enabled': 'true'
                     }
+
+                    # Only include signature if provided
+                    if video_signature:
+                        data['video_signature'] = video_signature
 
                     r = requests.post(
                         f"{TIKTOK_BASE}/file/video/ad/upload/",
