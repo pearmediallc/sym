@@ -482,6 +482,104 @@ def get_video_upload_signature():
     except requests.RequestException as e:
         return jsonify({"error": str(e)}), 500
 
+@app.post("/api/upload_image_file")
+def upload_image_file():
+    """
+    Upload an image file to TikTok Ads.
+    Supports both file upload and URL upload.
+    Multipart form data with:
+    - access_token
+    - advertiser_id
+    - image_file (the actual file) OR image_url
+    - upload_type: "UPLOAD_BY_FILE" or "UPLOAD_BY_URL"
+    """
+    import requests
+    import tempfile
+    import os
+
+    access_token = request.form.get("access_token", "").strip()
+    advertiser_id = request.form.get("advertiser_id", "").strip()
+    upload_type = request.form.get("upload_type", "UPLOAD_BY_FILE").strip()
+
+    if not access_token:
+        return jsonify({"error": "Missing access_token"}), 400
+    if not advertiser_id:
+        return jsonify({"error": "Missing advertiser_id"}), 400
+
+    if upload_type == "UPLOAD_BY_FILE":
+        if 'image_file' not in request.files:
+            return jsonify({"error": "No image file provided"}), 400
+    elif upload_type == "UPLOAD_BY_URL":
+        image_url = request.form.get("image_url", "").strip()
+        if not image_url:
+            return jsonify({"error": "image_url is required for URL upload"}), 400
+
+    try:
+        if upload_type == "UPLOAD_BY_FILE":
+            image_file = request.files['image_file']
+
+            # Save file temporarily
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(image_file.filename)[1]) as tmp_file:
+                image_file.save(tmp_file.name)
+                tmp_path = tmp_file.name
+
+            try:
+                # Open the file in binary mode
+                with open(tmp_path, 'rb') as f:
+                    # Prepare multipart form data
+                    files = {
+                        'image_file': (image_file.filename, f, image_file.content_type or 'image/jpeg')
+                    }
+
+                    data = {
+                        'advertiser_id': advertiser_id,
+                        'upload_type': 'UPLOAD_BY_FILE',
+                        'file_name': image_file.filename
+                    }
+
+                    r = requests.post(
+                        f"{TIKTOK_BASE}/file/image/ad/upload/",
+                        headers={"Access-Token": access_token},
+                        files=files,
+                        data=data,
+                        timeout=300,  # 5 minutes for large files
+                    )
+            finally:
+                # Clean up temporary file
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+        else:
+            # URL upload
+            image_url = request.form.get("image_url", "").strip()
+
+            # Use correct parameters for URL upload
+            payload = {
+                "advertiser_id": advertiser_id,
+                "upload_type": "UPLOAD_BY_URL",
+                "image_url": image_url,
+                "file_name": request.form.get("file_name", "uploaded_image.jpg")
+            }
+
+            r = requests.post(
+                f"{TIKTOK_BASE}/file/image/ad/upload/",
+                headers=tt_headers(access_token),
+                json=payload,
+                timeout=60,
+            )
+
+        # Try to parse JSON response
+        try:
+            response_data = r.json()
+        except:
+            # If JSON parsing fails, return the raw text
+            return jsonify({"error": "Invalid JSON response", "raw_response": r.text}), r.status_code
+
+        return jsonify(response_data), r.status_code
+    except requests.RequestException as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
+
 @app.post("/api/upload_video_file")
 def upload_video_file():
     """
