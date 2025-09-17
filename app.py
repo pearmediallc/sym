@@ -579,8 +579,10 @@ def upload_image_file():
         # Try to parse JSON response
         try:
             response_data = r.json()
+            print(f"TikTok upload response: {response_data}")
         except:
             # If JSON parsing fails, return the raw text
+            print(f"Failed to parse JSON response: {r.text}")
             return jsonify({"error": "Invalid JSON response", "raw_response": r.text}), r.status_code
 
         return jsonify(response_data), r.status_code
@@ -672,16 +674,20 @@ def upload_video_file():
             if not video_url:
                 return jsonify({"error": "video_url is required for URL upload"}), 400
 
-            # Use correct parameters for URL upload
+            # Use correct parameters for URL upload - matching your Postman example exactly
+            file_name = request.form.get("file_name", "uploaded_video.mp4")
+
             payload = {
                 "advertiser_id": advertiser_id,
+                "file_name": file_name,
                 "upload_type": "UPLOAD_BY_URL",
                 "video_url": video_url,
-                "file_name": request.form.get("file_name", "uploaded_video.mp4"),
                 "flaw_detect": True,
                 "auto_fix_enabled": True,
                 "auto_bind_enabled": True
             }
+
+            print(f"Uploading video with payload: {payload}")
 
             r = requests.post(
                 f"{TIKTOK_BASE}/file/video/ad/upload/",
@@ -693,8 +699,10 @@ def upload_video_file():
         # Try to parse JSON response
         try:
             response_data = r.json()
+            print(f"TikTok upload response: {response_data}")
         except:
             # If JSON parsing fails, return the raw text
+            print(f"Failed to parse JSON response: {r.text}")
             return jsonify({"error": "Invalid JSON response", "raw_response": r.text}), r.status_code
 
         return jsonify(response_data), r.status_code
