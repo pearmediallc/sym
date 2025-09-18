@@ -677,6 +677,7 @@ def upload_video_file():
             # Use correct parameters for URL upload - matching your Postman example exactly
             file_name = request.form.get("file_name", "uploaded_video.mp4")
 
+            # EXACT parameters from your working Postman request
             payload = {
                 "advertiser_id": advertiser_id,
                 "file_name": file_name,
@@ -687,7 +688,9 @@ def upload_video_file():
                 "auto_bind_enabled": True
             }
 
-            print(f"Uploading video with payload: {payload}")
+            print(f"Uploading video to TikTok Business Assets with payload: {payload}")
+            print(f"Using endpoint: {TIKTOK_BASE}/file/video/ad/upload/")
+            print(f"Headers: Access-Token: {access_token[:20]}...")
 
             r = requests.post(
                 f"{TIKTOK_BASE}/file/video/ad/upload/",
@@ -695,6 +698,8 @@ def upload_video_file():
                 json=payload,
                 timeout=60,
             )
+
+            print(f"Upload status code: {r.status_code}")
 
         # Try to parse JSON response
         try:
