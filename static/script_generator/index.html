@@ -877,15 +877,26 @@
           const videoList = data.data.list || [];
           const pageInfo = data.data.page_info || {};
 
-          console.log(`Found ${videoList.length} videos in TikTok Business Assets, Total: ${pageInfo.total_number || videoList.length}`);
+          console.log(`✅ Found ${videoList.length} videos in TikTok Business Assets, Total: ${pageInfo.total_number || videoList.length}`);
+
+          // Log first video details for debugging
+          if (videoList.length > 0) {
+            console.log('First video details:', {
+              video_id: videoList[0].video_id,
+              file_name: videoList[0].file_name,
+              cover_url: videoList[0].video_cover_url,
+              preview_url: videoList[0].preview_url
+            });
+          }
 
           // Clear any locally stored videos - we only want TikTok Business Assets videos
           selectedVideos = [];
 
           if (videoList.length > 0) {
+            console.log('📹 Displaying videos in grid...');
             displayVideoGrid(videoList);
             const totalCount = pageInfo.total_number || videoList.length;
-            qs('#videoLoadStatus').textContent = `Showing ${videoList.length} of ${totalCount} videos from TikTok Business Assets library`;
+            qs('#videoLoadStatus').textContent = `✅ Showing ${videoList.length} of ${totalCount} videos from TikTok Business Assets library`;
           } else {
             // No videos found
             if (pageInfo.total_number > 0) {
@@ -949,7 +960,14 @@
 
     function displayVideoGrid(videos) {
       const grid = qs('#videoGrid');
+
+      if (!grid) {
+        console.error('❌ Video grid element not found!');
+        return;
+      }
+
       grid.innerHTML = '';
+      console.log(`📹 displayVideoGrid called with ${videos?.length || 0} videos`);
 
       if (!videos || videos.length === 0) {
         grid.innerHTML = '<p class="muted" style="text-align: center; padding: 20px;">No videos available</p>';
