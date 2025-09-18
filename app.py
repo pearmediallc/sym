@@ -610,12 +610,13 @@ def upload_video_file():
     - access_token
     - advertiser_id
     - video_file (the actual file) OR video_url
-    - video_signature (for file upload)
+    - video_signature (for file upload - auto-generated if not provided)
     - upload_type: "UPLOAD_BY_FILE" or "UPLOAD_BY_URL"
     """
     import requests
     import tempfile
     import os
+    import hashlib
 
     access_token = request.form.get("access_token", "").strip()
     advertiser_id = request.form.get("advertiser_id", "").strip()
@@ -647,6 +648,13 @@ def upload_video_file():
                 tmp_path = tmp_file.name
 
             try:
+                # Generate MD5 signature if not provided
+                if not video_signature:
+                    with open(tmp_path, 'rb') as f:
+                        file_content = f.read()
+                        video_signature = hashlib.md5(file_content).hexdigest()
+                        print(f"Generated video signature (MD5): {video_signature}")
+
                 # Open the file in binary mode
                 with open(tmp_path, 'rb') as f:
                     # Prepare multipart form data EXACTLY as TikTok expects
@@ -659,14 +667,11 @@ def upload_video_file():
                         'advertiser_id': advertiser_id,
                         'file_name': video_file.filename,
                         'upload_type': 'UPLOAD_BY_FILE',
+                        'video_signature': video_signature,  # Always include signature
                         'flaw_detect': 'true',
                         'auto_fix_enabled': 'true',
                         'auto_bind_enabled': 'true'
                     }
-
-                    # Only include signature if provided
-                    if video_signature:
-                        data['video_signature'] = video_signature
 
                     print(f"File upload with form data: {data}")
 
