@@ -9,10 +9,10 @@ TIKTOK_BASE = "https://business-api.tiktok.com/open_api/v1.3"
 app = Flask(__name__, static_url_path="", static_folder="static")
 CORS(app, supports_credentials=True)
 
-def tt_headers(access_token: str):
+def tt_headers(access_token: str, content_type="application/json"):
     return {
         "Access-Token": access_token,
-        "Content-Type": "application/json"
+        "Content-Type": content_type
     }
 
 @app.route("/")
@@ -535,17 +535,21 @@ def upload_image_file():
             try:
                 # Open the file in binary mode
                 with open(tmp_path, 'rb') as f:
-                    # Prepare multipart form data
+                    # Prepare multipart form data EXACTLY as TikTok expects
                     files = {
                         'image_file': (image_file.filename, f, image_file.content_type or 'image/jpeg')
                     }
 
+                    # Form data - must be strings for multipart
                     data = {
                         'advertiser_id': advertiser_id,
-                        'upload_type': 'UPLOAD_BY_FILE',
-                        'file_name': image_file.filename
+                        'file_name': image_file.filename,
+                        'upload_type': 'UPLOAD_BY_FILE'
                     }
 
+                    print(f"Image file upload with form data: {data}")
+
+                    # Use only Access-Token header, no Content-Type for multipart
                     r = requests.post(
                         f"{TIKTOK_BASE}/file/image/ad/upload/",
                         headers={"Access-Token": access_token},
@@ -561,17 +565,23 @@ def upload_image_file():
             # URL upload
             image_url = request.form.get("image_url", "").strip()
 
-            # Use correct parameters for URL upload
+            # JSON payload for URL upload (not form data)
             payload = {
                 "advertiser_id": advertiser_id,
+                "file_name": request.form.get("file_name", "uploaded_image.jpg"),
                 "upload_type": "UPLOAD_BY_URL",
-                "image_url": image_url,
-                "file_name": request.form.get("file_name", "uploaded_image.jpg")
+                "image_url": image_url
             }
 
+            print(f"Image URL upload with JSON payload: {payload}")
+
+            # Use JSON with proper headers
             r = requests.post(
                 f"{TIKTOK_BASE}/file/image/ad/upload/",
-                headers=tt_headers(access_token),
+                headers={
+                    "Access-Token": access_token,
+                    "Content-Type": "application/json"
+                },
                 json=payload,
                 timeout=60,
             )
@@ -639,15 +649,16 @@ def upload_video_file():
             try:
                 # Open the file in binary mode
                 with open(tmp_path, 'rb') as f:
-                    # Prepare multipart form data with signature
+                    # Prepare multipart form data EXACTLY as TikTok expects
                     files = {
                         'video_file': (video_file.filename, f, video_file.content_type or 'video/mp4')
                     }
 
+                    # Form data - must be strings for multipart
                     data = {
                         'advertiser_id': advertiser_id,
-                        'upload_type': 'UPLOAD_BY_FILE',
                         'file_name': video_file.filename,
+                        'upload_type': 'UPLOAD_BY_FILE',
                         'flaw_detect': 'true',
                         'auto_fix_enabled': 'true',
                         'auto_bind_enabled': 'true'
@@ -657,6 +668,9 @@ def upload_video_file():
                     if video_signature:
                         data['video_signature'] = video_signature
 
+                    print(f"File upload with form data: {data}")
+
+                    # Use only Access-Token header, no Content-Type for multipart
                     r = requests.post(
                         f"{TIKTOK_BASE}/file/video/ad/upload/",
                         headers={"Access-Token": access_token},
@@ -674,10 +688,10 @@ def upload_video_file():
             if not video_url:
                 return jsonify({"error": "video_url is required for URL upload"}), 400
 
-            # Use correct parameters for URL upload - matching your Postman example exactly
+            # EXACT format from TikTok documentation for URL upload
             file_name = request.form.get("file_name", "uploaded_video.mp4")
 
-            # EXACT parameters from your working Postman request
+            # JSON payload for URL upload (not form data)
             payload = {
                 "advertiser_id": advertiser_id,
                 "file_name": file_name,
@@ -688,13 +702,17 @@ def upload_video_file():
                 "auto_bind_enabled": True
             }
 
-            print(f"Uploading video to TikTok Business Assets with payload: {payload}")
+            print(f"URL upload with JSON payload: {payload}")
             print(f"Using endpoint: {TIKTOK_BASE}/file/video/ad/upload/")
-            print(f"Headers: Access-Token: {access_token[:20]}...")
+            print(f"Headers: Access-Token: {access_token[:20]}..., Content-Type: application/json")
 
+            # Use JSON with proper headers
             r = requests.post(
                 f"{TIKTOK_BASE}/file/video/ad/upload/",
-                headers=tt_headers(access_token),
+                headers={
+                    "Access-Token": access_token,
+                    "Content-Type": "application/json"
+                },
                 json=payload,
                 timeout=60,
             )
