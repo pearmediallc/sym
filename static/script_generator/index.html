@@ -826,7 +826,7 @@
       }
     }
 
-    // Auto-load user's TikTok videos
+    // Load videos ONLY from TikTok Business Assets library - NOT from local storage
     async function loadUserVideos() {
       const access_token = qs('#accessToken').value.trim();
       const advertiser_id = qs('#advertiserId').value.trim();
@@ -849,7 +849,7 @@
         return;
       }
 
-      qs('#videoLoadStatus').textContent = 'Loading your TikTok videos...';
+      qs('#videoLoadStatus').textContent = 'Loading videos from TikTok Business Assets library...';
 
       if (qs('#refreshVideosBtn')) {
         qs('#refreshVideosBtn').disabled = true;
@@ -877,20 +877,23 @@
           const videoList = data.data.list || [];
           const pageInfo = data.data.page_info || {};
 
-          console.log(`Found ${videoList.length} videos, Total: ${pageInfo.total_number || videoList.length}`);
+          console.log(`Found ${videoList.length} videos in TikTok Business Assets, Total: ${pageInfo.total_number || videoList.length}`);
+
+          // Clear any locally stored videos - we only want TikTok Business Assets videos
+          selectedVideos = [];
 
           if (videoList.length > 0) {
             displayVideoGrid(videoList);
             const totalCount = pageInfo.total_number || videoList.length;
-            qs('#videoLoadStatus').textContent = `Showing ${videoList.length} of ${totalCount} videos from your TikTok Ads library`;
+            qs('#videoLoadStatus').textContent = `Showing ${videoList.length} of ${totalCount} videos from TikTok Business Assets library`;
           } else {
             // No videos found
             if (pageInfo.total_number > 0) {
-              qs('#videoLoadStatus').textContent = `${pageInfo.total_number} videos exist but not on this page. Try refreshing.`;
+              qs('#videoLoadStatus').textContent = `${pageInfo.total_number} videos exist but not visible. Click Refresh to retry.`;
             } else {
-              qs('#videoLoadStatus').textContent = 'No videos found in your TikTok Ads library yet. Videos you upload will appear here.';
+              qs('#videoLoadStatus').textContent = 'No videos found in TikTok Business Assets library. Videos must be uploaded through TikTok Ads Manager to appear here.';
             }
-            qs('#videoGrid').innerHTML = '<p style="text-align: center; padding: 40px; color: #999;">No videos to display. Upload a video to get started.</p>';
+            qs('#videoGrid').innerHTML = '<p style="text-align: center; padding: 40px; color: #999;">No videos from TikTok Business Assets. Upload videos through TikTok Ads Manager.</p>';
           }
         } else if (data?.message) {
           // Handle error response
@@ -1069,22 +1072,20 @@
         if (mediaId) {
           qs('#uploadStatus').textContent = `✅ Upload successful! ${currentMediaType.charAt(0).toUpperCase() + currentMediaType.slice(1)} ID: ${mediaId}`;
           qs('#uploadStatus').style.color = '#10b981';
-          // Add to selected videos (if video)
-          if (currentMediaType === 'video') {
-            selectedVideos.push(mediaId);
-            qs('#selectedCount').textContent = selectedVideos.length;
-          }
+          // DON'T add to selected videos - wait for it to appear in TikTok Business Assets
           // Clear the file input
           qs('#mediaFile').value = '';
           qs('#fileName').textContent = 'No file selected';
           qs('#uploadFileBtn').style.display = 'none';
-          // Reload the video grid to show the new media
+          // Wait longer before reloading to give TikTok time to process
+          qs('#uploadStatus').innerHTML += '<br><small>Waiting for TikTok to process the video...</small>';
           setTimeout(() => {
             if (currentMediaType === 'video') {
+              qs('#uploadStatus').innerHTML += '<br><small>Refreshing video list from TikTok Business Assets...</small>';
               loadUserVideos();
               switchVideoTab('library');
             }
-          }, 2000);
+          }, 5000); // Wait 5 seconds for TikTok to process
         } else if (data?.code === '0' || data?.code === 0) {
           // TikTok API returns code 0 for success
           qs('#uploadStatus').textContent = `✅ ${currentMediaType.charAt(0).toUpperCase() + currentMediaType.slice(1)} upload initiated successfully. Check your library.`;
@@ -1237,21 +1238,19 @@
         if (mediaId) {
           qs('#urlUploadStatus').textContent = `✅ Upload successful! ${currentMediaType.charAt(0).toUpperCase() + currentMediaType.slice(1)} ID: ${mediaId}`;
           qs('#urlUploadStatus').style.color = '#10b981';
-          // Add to selected videos (if video)
-          if (currentMediaType === 'video') {
-            selectedVideos.push(mediaId);
-            qs('#selectedCount').textContent = selectedVideos.length;
-          }
+          // DON'T add to selected videos - wait for it to appear in TikTok Business Assets
           // Clear the inputs
           qs('#mediaUrl').value = '';
           qs('#urlFileName').value = '';
-          // Reload the video grid to show the new media
+          // Wait longer before reloading to give TikTok time to process
+          qs('#urlUploadStatus').innerHTML += '<br><small>Video uploaded. Waiting for TikTok Business Assets to process...</small>';
           setTimeout(() => {
             if (currentMediaType === 'video') {
+              qs('#urlUploadStatus').innerHTML += '<br><small>Refreshing video list from TikTok Business Assets...</small>';
               loadUserVideos();
               switchVideoTab('library');
             }
-          }, 2000);
+          }, 5000); // Wait 5 seconds for TikTok to process
         } else if (data?.code === '0' || data?.code === 0) {
           // TikTok API returns code 0 for success
           qs('#urlUploadStatus').textContent = `✅ ${currentMediaType.charAt(0).toUpperCase() + currentMediaType.slice(1)} upload initiated successfully. Check your library.`;
