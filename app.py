@@ -369,6 +369,49 @@ def update_avatar_video_name():
     except requests.RequestException as e:
         return jsonify({"error": str(e)}), 500
 
+@app.get("/api/get_video_info")
+def get_video_info():
+    """
+    Get detailed information about specific videos including thumbnail URLs
+    Query params:
+      access_token=...
+      advertiser_id=...
+      video_ids=["video_id1","video_id2"] (JSON array as string)
+    """
+    access_token = (request.args.get("access_token") or "").strip()
+    advertiser_id = (request.args.get("advertiser_id") or "").strip()
+    video_ids_str = (request.args.get("video_ids") or "").strip()
+
+    if not access_token or not advertiser_id or not video_ids_str:
+        return jsonify({"error": "access_token, advertiser_id and video_ids are required"}), 400
+
+    try:
+        import json
+        video_ids = json.loads(video_ids_str)
+        if not isinstance(video_ids, list):
+            return jsonify({"error": "video_ids must be a JSON array"}), 400
+    except:
+        return jsonify({"error": "video_ids must be a valid JSON array"}), 400
+
+    try:
+        # v1.3 endpoint for video info
+        r = requests.get(
+            f"{TIKTOK_BASE}/file/video/ad/info/",
+            headers={"Access-Token": access_token},
+            params={
+                "advertiser_id": advertiser_id,
+                "video_ids": json.dumps(video_ids)
+            },
+            timeout=30,
+        )
+
+        response_data = r.json()
+        print(f"Video info response: {response_data}")
+
+        return jsonify(response_data), r.status_code
+    except requests.RequestException as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.get("/api/get_assets_videos")
 def get_assets_videos():
     """
