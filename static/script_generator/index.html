@@ -872,8 +872,8 @@
           page_info: data?.data?.page_info
         });
 
-        // Handle successful response with code "0" (TikTok uses string "0" for success)
-        if ((data?.code === '0' || data?.code === 0 || data?.code === "OK") && data?.data) {
+        // Handle successful response - TikTok returns code: 0 (number) for success
+        if ((data?.code === 0 || data?.code === '0' || data?.message === 'OK') && data?.data) {
           const videoList = data.data.list || [];
           const pageInfo = data.data.page_info || {};
 
